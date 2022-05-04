@@ -30,9 +30,6 @@ int main(int argc, char* argv[])
 
 
   diag::DiagWorld world(config);
+  world.Run();
 
-  // for (size_t ud = 0; ud <= config.MAX_GENS(); ud++)
-  // {
-  //   world.Update();
-  // }
 }

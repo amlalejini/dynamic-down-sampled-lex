@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <filesystem>
+#include <sys/stat.h>
 
 ///< empirical headers
 #include "emp/Evolve/World.hpp"
@@ -68,130 +70,18 @@ class DiagWorld : public emp::World<Org>
     using nodeo_t = emp::Ptr<emp::DataMonitor<size_t>>;
     using como_t = std::map<size_t, ids_t>;
 
-  public:
-
-    DiagWorld(DiaConfig & _config) : config(_config), data_file(_config.OUTPUT_DIR() + "data.csv")
-    {
-      // set random pointer seed
-      random_ptr = emp::NewPtr<emp::Random>(config.SEED());
-
-      // initialize the world
-      Initialize();
-    }
-
-    ~DiagWorld()
-    {
-      selection.Delete();
-      diagnostic.Delete();
-      pop_fit.Delete();
-      pop_opti.Delete();
-      pnt_fit.Delete();
-      pnt_opti.Delete();
-    }
-
-    ///< functions called to setup the world
-
-    // call all functions to initiallize the world
-    void Initialize();
-
-    // set OnUpdate function from World.h
-    void SetOnUpdate();
-
-    // set mutation operator from World.h
-    void SetMutation();
-
-    // set selction scheme
-    void SetSelection();
-
-    // set what to do when offspring is ready to go
-    void SetOnOffspringReady();
-
-    // set evaluation function
-    void SetEvaluation();
-
-    // set data tracking with data nodes
-    void SetDataTracking();
-
-    // populate the world with initial solutions
-    void PopulateWorld();
-
-
-    ///< principle steps during an evolutionary run
-
-    // reset all data step
-    void ResetData();
-
-    // evaluation step
-    void EvaluationStep();
-
-    // selction step
-    void SelectionStep();
-
-    // reprodutive step
-    void ReproductionStep();
-
-    // record data step
-    void RecordData();
-
-
-    ///< selection scheme implementations
-
-    void Truncation();
-
-    void Tournament();
-
-    void FitnessSharing();
-
-    void EpsilonLexicase();
-
-    void NonDominatedSorting();
-
-    void NoveltySearch();
-
-
-    ///< evaluation function implementations
-
-    void Exploitation();
-
-    void StructuredExploitation();
-
-    void StrongEcology();
-
-    void Exploration();
-
-    void WeakEcology();
-
-
-    ///< data tracking
-
-    size_t UniqueObjective();
-
-    size_t FindUniqueStart();
-
-    void FindEverything();
-
-    size_t ActivationGeneOverlap();
-
-    ///< helper functions
-
-    // create a matrix of popultion score vectors
-    fmatrix_t PopFitMat();
-
-    // create matrix of population genomes
-    gmatrix_t PopGenomes();
-
-    // update archive
-    // return true if archive changes
-    bool ArchiveUpdate(const score_t & score, const fmatrix_t & dmat);
-
-    // update archive data
-    void ArchiveDataUpdate(const size_t org_id);
-
-
   private:
+
     // experiment configurations
     DiaConfig & config;
-    enum Scheme {TRUNCATION=0,TOURNAMENT=1,FITNESS_SHARING=2,LEXICASE=3,NONDOMINATED=4,NOVELTY=5};
+    enum class Scheme {
+      TRUNCATION=0,
+      TOURNAMENT=1,
+      FITNESS_SHARING=2,
+      LEXICASE=3,
+      NONDOMINATED=4,
+      NOVELTY=5
+    };
 
     // target vector
     target_t target;
@@ -210,16 +100,16 @@ class DiagWorld : public emp::World<Org>
     // selection lambda we set
     sele_t select;
 
-
     // select.h var
     emp::Ptr<Selection> selection;
     // problem.h var
     emp::Ptr<Diagnostic> diagnostic;
 
     ///< data file & node related variables
-
     // file we are working with
-    emp::DataFile data_file;
+    emp::Ptr<emp::DataFile> data_file;       ///< Population-level data(?)
+    emp::Ptr<emp::DataFile> elite_data_file; ///< Stores information about the elite organism
+    std::string output_dir;
     // systematics tracking
     // emp::Ptr<systematics_t> sys_ptr;
     // node to track population fitnesses
@@ -232,11 +122,10 @@ class DiagWorld : public emp::World<Org>
     nodeo_t pnt_opti;
     // node to track streak counts
     nodeo_t pop_str;
-    // csv file to track best performing solutions
-    std::ofstream elite_csv;
+    // // csv file to track best performing solutions
+    // std::ofstream elite_csv;
 
     ///< data we are tracking during an evolutionary run
-
     // elite solution position
     size_t elite_pos;
     // common solution position
@@ -259,7 +148,95 @@ class DiagWorld : public emp::World<Org>
     optimal_t arc_opti_trt;
     // archive activation gene vector
     optimal_t arc_acti_gene;
+
+    // ---- call all functions to initiallize the world ----
+    void Initialize();
+    void SetOnUpdate();
+    void SetMutation();
+    void SetSelection();
+    void SetOnOffspringReady();
+    void SetEvaluation();
+    void SetDataTracking();
+    void PopulateWorld();
+
+    // ---- principle steps during an evolutionary run ----
+    void ResetData();
+    void EvaluationStep();
+    void SelectionStep();
+    void ReproductionStep();
+    void RecordData();
+
+    // ---- selection scheme implementations ----
+    void Truncation();
+    void Tournament();
+    void FitnessSharing();
+    void EpsilonLexicase();
+    void NonDominatedSorting();
+    void NoveltySearch();
+
+    // ---- evaluation function implementations ----
+    void Exploitation();
+    void StructuredExploitation();
+    void StrongEcology();
+    void Exploration();
+    void WeakEcology();
+
+    // ---- data tracking ----
+    size_t UniqueObjective();
+    size_t FindUniqueStart();
+    void FindEverything();
+    size_t ActivationGeneOverlap();
+
+    // ---- helper functions ----
+    // create a matrix of popultion score vectors
+    fmatrix_t PopFitMat();
+
+    // create matrix of population genomes
+    gmatrix_t PopGenomes();
+
+    // update archive
+    bool ArchiveUpdate(const score_t & score, const fmatrix_t & dmat);
+    void ArchiveDataUpdate(const size_t org_id);
+
+  public:
+
+    DiagWorld(
+      DiaConfig & _config
+    ) :
+      config(_config)
+    {
+      // set random pointer seed
+      this->NewRandom(config.SEED());
+      // initialize the world
+      Initialize();
+    }
+
+    ~DiagWorld() {
+      selection.Delete();
+      diagnostic.Delete();
+      pop_fit.Delete();
+      pop_opti.Delete();
+      pnt_fit.Delete();
+      pnt_opti.Delete();
+      data_file.Delete();
+      elite_data_file.Delete();
+    }
+
+    void RunStep();
+    void Run();
 };
+
+void DiagWorld::RunStep() {
+  this->Update();
+}
+
+void DiagWorld::Run() {
+  for (size_t ud = 0; ud <= config.MAX_GENS(); ud++)
+  {
+    RunStep();
+  }
+}
+
 
 ///< functions called to setup the world
 
@@ -273,7 +250,6 @@ void DiagWorld::Initialize()
   Reset();
   // set world to well mixed so we don't over populate
   SetPopStruct_Mixed(true);
-
 
   // stuff we need to initialize for the experiment
   SetEvaluation();
@@ -322,47 +298,42 @@ void DiagWorld::SetMutation()
   std::cout << "Setting mutation function..." << std::endl;
 
   // set the mutation function
-  SetMutFun([this](Org & org, emp::Random & random)
-  {
-    // number of mutations and solution genome
-    size_t mcnt = 0;
-    genome_t & genome = org.GetGenome();
+  SetMutFun(
+    [this](Org & org, emp::Random & random) {
+      // number of mutations and solution genome
+      size_t mcnt = 0;
+      genome_t & genome = org.GetGenome();
 
-    // quick checks
-    emp_assert(genome.size() == config.OBJECTIVE_CNT());
-    emp_assert(target.size() == config.OBJECTIVE_CNT());
+      // quick checks
+      emp_assert(genome.size() == config.OBJECTIVE_CNT());
+      emp_assert(target.size() == config.OBJECTIVE_CNT());
 
-    for(size_t i = 0; i < genome.size(); ++i)
-    {
-      // if we do a mutation at this objective
-      if(random_ptr->P(config.MUTATE_PER()))
-      {
-        const double mut = random_ptr->GetRandNormal(config.MEAN(), config.STD());
+      for (size_t i = 0; i < genome.size(); ++i) {
+        // if we do a mutation at this objective
+        if (random_ptr->P(config.MUTATE_PER())) {
+          const double mut = random_ptr->GetRandNormal(config.MEAN(), config.STD());
 
-        // mutation puts objective above target
-        if(config.TARGET() < genome[i] + mut)
-        {
-          // we wrap it back around target value
-          genome[i] = target[i] - (genome[i] + mut - target[i]);
-        }
-        // mutation puts objective in the negatives
-        else if(genome[i] + mut < config.LOWER_BND())
-        {
-          // genome[i] = std::abs(genome[i] + mut) + config.LOWER_BND();
-          genome[i] = config.LOWER_BND();
-        }
-        else
-        {
+          // mutation puts objective above target
+          if (config.TARGET() < genome[i] + mut) {
+            // we wrap it back around target value
+            genome[i] = target[i] - (genome[i] + mut - target[i]);
+
+          // mutation puts objective in the negatives
+          } else if (genome[i] + mut < config.LOWER_BND()) {
+            // genome[i] = std::abs(genome[i] + mut) + config.LOWER_BND();
+            genome[i] = config.LOWER_BND();
+
           // else we can simply add mutation
-          genome[i] = genome[i] + mut;
+          } else {
+            genome[i] = genome[i] + mut;
+          }
+
+          ++mcnt;
         }
-
-        ++mcnt;
       }
+      return mcnt;
     }
-
-    return mcnt;
-  });
+  );
 
   std::cout << "Mutation function set!\n" << std::endl;
 }
@@ -402,8 +373,8 @@ void DiagWorld::SetSelection()
       break;
 
     default:
-      std::cout << "ERROR UNKNOWN SELECTION CALL" << std::endl;
-      emp_assert(true);
+      std::cout << "ERROR UNKNOWN SELECTION CALL, " << config.SELECTION() << std::endl;
+      emp_assert(false);
       break;
   }
 
@@ -415,32 +386,34 @@ void DiagWorld::SetOnOffspringReady()
   std::cout << "------------------------------------------------" << std::endl;
   std::cout << "Setting OnOffspringReady function..." << std::endl;
 
-  OnOffspringReady([this](Org & org, size_t parent_pos)
-  {
-    // quick checks
-    emp_assert(fun_do_mutations); emp_assert(random_ptr);
-    emp_assert(org.GetGenome().size() == config.OBJECTIVE_CNT());
-    emp_assert(org.GetM() == config.OBJECTIVE_CNT());
-
-    // do mutations on offspring
-    size_t mcnt = fun_do_mutations(org, *random_ptr);
-
-    // no mutations were applied to offspring
-    if(mcnt == 0)
-    {
-      Org & parent = *pop[parent_pos];
-
+  OnOffspringReady(
+    [this](Org & org, size_t parent_pos) {
       // quick checks
-      emp_assert(parent.GetGenome().size() == config.OBJECTIVE_CNT());
-      emp_assert(parent.GetM() == config.OBJECTIVE_CNT());
+      emp_assert(fun_do_mutations);
+      emp_assert(random_ptr);
+      emp_assert(org.GetGenome().size() == config.OBJECTIVE_CNT());
+      emp_assert(org.GetM() == config.OBJECTIVE_CNT());
 
-      // give everything to offspring from parent
-      org.MeClone();
-      org.Inherit(parent.GetScore(), parent.GetOptimal(), parent.GetCount(), parent.GetAggregate(), parent.GetStart(), parent.GetStreak());
+      // do mutations on offspring
+      size_t mcnt = fun_do_mutations(org, *random_ptr);
+
+      // no mutations were applied to offspring
+      if(mcnt == 0) {
+        Org & parent = *pop[parent_pos];
+
+        // quick checks
+        emp_assert(parent.GetGenome().size() == config.OBJECTIVE_CNT());
+        emp_assert(parent.GetM() == config.OBJECTIVE_CNT());
+
+        // give everything to offspring from parent
+        org.MeClone();
+        org.Inherit(parent.GetScore(), parent.GetOptimal(), parent.GetCount(), parent.GetAggregate(), parent.GetStart(), parent.GetStreak());
+
+      } else{
+        org.Reset();
+      }
     }
-    else{org.Reset();}
-  });
-
+  );
   std::cout << "Finished setting OnOffspringReady function!\n" << std::endl;
 }
 
@@ -491,58 +464,78 @@ void DiagWorld::SetDataTracking()
 {
   std::cout << "------------------------------------------------" << std::endl;
   std::cout << "Setting up data tracking..." << std::endl;
+  if (data_file != nullptr) {
+    data_file.Delete();
+  }
+  if (elite_data_file != nullptr) {
+    elite_data_file.Delete();
+  }
+
+  output_dir = config.OUTPUT_DIR();
+  if (output_dir.back() != '/') {
+    output_dir += "/";
+  }
+  mkdir(output_dir.c_str(), ACCESSPERMS);
+  data_file = emp::NewPtr<emp::DataFile>(output_dir + "data.csv");
 
   // initialize all nodes
   std::cout << "Initializing nodes..." << std::endl;
-  pop_fit.New(); pop_opti.New(); pnt_fit.New(); pnt_opti.New(); pop_str.New();
+  pop_fit.New();
+  pop_opti.New();
+  pnt_fit.New();
+  pnt_opti.New();
+  pop_str.New();
   std::cout << "Nodes initialized!" << std::endl;
 
   // track population aggregate score stats: average, variance, min, max
-  data_file.AddMean(*pop_fit, "pop_fit_avg", "Population average aggregate performance.");
-  data_file.AddVariance(*pop_fit, "pop_fit_var", "Population variance aggregate performance.");
-  data_file.AddMax(*pop_fit, "pop_fit_max", "Population maximum aggregate performance.");
-  data_file.AddMin(*pop_fit, "pop_fit_min", "Population minimum aggregate performance.");
+  data_file->AddMean(*pop_fit, "pop_fit_avg", "Population average aggregate performance.");
+  data_file->AddVariance(*pop_fit, "pop_fit_var", "Population variance aggregate performance.");
+  data_file->AddMax(*pop_fit, "pop_fit_max", "Population maximum aggregate performance.");
+  data_file->AddMin(*pop_fit, "pop_fit_min", "Population minimum aggregate performance.");
 
   // track population optimized objective count stats: average, variance, min, max
-  data_file.AddMean(*pop_opti, "pop_opt_avg", "Population average objective optimization count.");
-  data_file.AddVariance(*pop_opti, "pop_opt_var", "Population variance objective optimization count.");
-  data_file.AddMax(*pop_opti, "pop_opt_max", "Population maximum objective optimization count.");
-  data_file.AddMin(*pop_opti, "pop_opt_min", "Population minimum objective optimization count.");
+  data_file->AddMean(*pop_opti, "pop_opt_avg", "Population average objective optimization count.");
+  data_file->AddVariance(*pop_opti, "pop_opt_var", "Population variance objective optimization count.");
+  data_file->AddMax(*pop_opti, "pop_opt_max", "Population maximum objective optimization count.");
+  data_file->AddMin(*pop_opti, "pop_opt_min", "Population minimum objective optimization count.");
 
   // track parent aggregate score stats: average, variance, min, max
-  data_file.AddMean(*pnt_fit, "pnt_fit_avg", "Parent average aggregate performance.");
-  data_file.AddVariance(*pnt_fit, "pnt_fit_var", "Parent variance aggregate performance.");
-  data_file.AddMax(*pnt_fit, "pnt_fit_max", "Parent maximum aggregate performance.");
-  data_file.AddMin(*pnt_fit, "pnt_fit_min", "Parent minimum aggregate performance.");
+  data_file->AddMean(*pnt_fit, "pnt_fit_avg", "Parent average aggregate performance.");
+  data_file->AddVariance(*pnt_fit, "pnt_fit_var", "Parent variance aggregate performance.");
+  data_file->AddMax(*pnt_fit, "pnt_fit_max", "Parent maximum aggregate performance.");
+  data_file->AddMin(*pnt_fit, "pnt_fit_min", "Parent minimum aggregate performance.");
 
   // track parent optimized objective count stats: average, variance, min, max
-  data_file.AddMean(*pnt_opti, "pnt_opt_avg", "Parent average objective optimization count.");
-  data_file.AddVariance(*pnt_opti, "pnt_opt_var", "Parent variance objective optimization count.");
-  data_file.AddMax(*pnt_opti, "pnt_opt_max", "Parent maximum objective optimization count.");
-  data_file.AddMin(*pnt_opti, "pnt_opt_min", "Parent minimum objective optimization count.");
+  data_file->AddMean(*pnt_opti, "pnt_opt_avg", "Parent average objective optimization count.");
+  data_file->AddVariance(*pnt_opti, "pnt_opt_var", "Parent variance objective optimization count.");
+  data_file->AddMax(*pnt_opti, "pnt_opt_max", "Parent maximum objective optimization count.");
+  data_file->AddMin(*pnt_opti, "pnt_opt_min", "Parent minimum objective optimization count.");
 
   // track parent optimized objective count stats: average, variance, min, max
-  data_file.AddMean(*pop_str, "pop_str_avg", "Population average streak count.");
-  data_file.AddVariance(*pop_str, "pop_str_var", "Population variance streak count.");
-  data_file.AddMax(*pop_str, "pop_str_max", "Population maximum streak count.");
-  data_file.AddMin(*pop_str, "pop_str_min", "Population minimum streak count.");
+  data_file->AddMean(*pop_str, "pop_str_avg", "Population average streak count.");
+  data_file->AddVariance(*pop_str, "pop_str_var", "Population variance streak count.");
+  data_file->AddMax(*pop_str, "pop_str_max", "Population maximum streak count.");
+  data_file->AddMin(*pop_str, "pop_str_min", "Population minimum streak count.");
 
   std::cout << "Added all data nodes to data file!" << std::endl;
 
   // update we are at
-  data_file.AddFun<size_t>([this]()
-  {
-    return update;
-  }, "gen", "Current generation at!");
+  data_file->AddFun<size_t>(
+    [this]() {
+      return update;
+    },
+    "gen",
+    "Current generation at!"
+  );
 
   // unique optimized objectives count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     return UniqueObjective();
   }, "pop_uni_obj", "Number of unique optimized traits per generation!");
 
   // elite solution aggregate performance
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(elite_pos != config.POP_SIZE());
@@ -554,7 +547,7 @@ void DiagWorld::SetDataTracking()
   }, "ele_agg_per", "Elite solution aggregate performance!");
 
   // elite solution optimized objectives count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     // quick checks
     emp_assert(elite_pos != config.POP_SIZE());
@@ -566,7 +559,7 @@ void DiagWorld::SetDataTracking()
   }, "ele_opt_cnt", "Elite solution optimized objective count!");
 
   // optimized solution aggregate performance
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(opti_pos != config.POP_SIZE());
@@ -578,7 +571,7 @@ void DiagWorld::SetDataTracking()
   }, "opt_agg_per", "Otpimal solution aggregate performance");
 
   // optimized solution optimized objectives count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     // quick checks
     emp_assert(opti_pos != config.POP_SIZE());
@@ -590,7 +583,7 @@ void DiagWorld::SetDataTracking()
   }, "opt_obj_cnt", "Otpimal solution aggregate performance");
 
   // streak solution aggregate performance
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(strk_pos != config.POP_SIZE());
@@ -602,7 +595,7 @@ void DiagWorld::SetDataTracking()
   }, "str_agg_per", "Otpimal solution aggregate performance");
 
   // streak solution optimized objectives count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     // quick checks
     emp_assert(strk_pos != config.POP_SIZE());
@@ -614,7 +607,7 @@ void DiagWorld::SetDataTracking()
   }, "str_obj_cnt", "Otpimal solution aggregate performance");
 
   // loss of diversity
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(parent_vec.size() == config.POP_SIZE());
@@ -630,7 +623,7 @@ void DiagWorld::SetDataTracking()
   }, "los_div", "Loss in diversity generated by the selection scheme!");
 
   // selection pressure
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(pop_fit->GetCount() == config.POP_SIZE());
@@ -646,7 +639,7 @@ void DiagWorld::SetDataTracking()
   }, "sel_pre", "Selection pressure applied by selection scheme!");
 
   // selection variance
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     // quick checks
     emp_assert(pop_fit->GetCount() == config.POP_SIZE());
@@ -661,14 +654,14 @@ void DiagWorld::SetDataTracking()
   }, "sel_var", "Selection pressure applied by selection scheme!");
 
   // unique starting positions
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     emp_assert(pop_acti_gene.size()  == config.OBJECTIVE_CNT());
     return FindUniqueStart();
   }, "uni_str_pos", "Number of unique starting positions in the population!");
 
   // Pareto group count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     if(config.SELECTION() == static_cast<size_t>(Scheme::NONDOMINATED))
     {
@@ -683,54 +676,99 @@ void DiagWorld::SetDataTracking()
   }, "pareto_cnt", "Number of Pareto groups generated!");
 
   // archive group count
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     return archive.size();
   }, "archive_cnt", "Number phenotypes in the archive!");
 
   // archive group count
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     return pmin;
   }, "pmin", "pmin used for archive approval!");
 
   // archive group count
-  data_file.AddFun<double>([this]()
+  data_file->AddFun<double>([this]()
   {
     return arc_elite;
   }, "arc_elite", "archive best fitness found so far!");
 
   // archive unique optimal traits
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     return std::accumulate(arc_opti_trt.begin(), arc_opti_trt.end(), 0);
   }, "arc_opti_trt", "Unique optimal traits found in the archive!");
 
   // archive unique activation genes
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     return std::accumulate(arc_acti_gene.begin(), arc_acti_gene.end(), 0);
   }, "arc_acti_gene", "Unique activation genes found in the archive!");
 
   // archive unique activation genes
-  data_file.AddFun<size_t>([this]()
+  data_file->AddFun<size_t>([this]()
   {
     return ActivationGeneOverlap();
   }, "overlap", "Unique activation genes found in the archive!");
 
-  data_file.PrintHeaderKeys();
+  data_file->PrintHeaderKeys();
 
   // create elite csv plus headers
-  elite_csv.open(config.OUTPUT_DIR() + "elite.csv");
-
-  std::string header = "Gen";
-  for(size_t i = 0; i < config.OBJECTIVE_CNT(); ++i)
-  {
-    header += ",t";
-    header += std::to_string(i);
-  }
-  elite_csv << header << "\n";
-
+  elite_data_file = emp::NewPtr<emp::DataFile>(output_dir + "elite.csv");
+  elite_data_file->AddFun<size_t>(
+    [this]() {
+      return update;
+    },
+    "gen",
+    "Current generation"
+  );
+  elite_data_file->AddFun<std::string>(
+    [this]() {
+      std::ostringstream stream;
+      const auto& elite_org = GetOrg(elite_pos);
+      const auto& genome = elite_org.GetGenome();
+      stream << "\"[";
+      for (size_t i = 0; i < genome.size(); ++i) {
+        if (i) stream << ",";
+        stream << genome[i];
+      }
+      stream << "]\"";
+      return stream.str();
+    },
+    "genome",
+    "Genome of the current elite organism"
+  );
+  elite_data_file->AddFun<std::string>(
+    [this]() {
+      std::ostringstream stream;
+      const auto& elite_org = GetOrg(elite_pos);
+      const auto& phenotype = elite_org.GetScore();
+      stream << "\"[";
+      for (size_t i = 0; i < phenotype.size(); ++i) {
+        if (i) stream << ",";
+        stream << phenotype[i];
+      }
+      stream << "]\"";
+      return stream.str();
+    },
+    "phenotype",
+    "Phenotype of the current elite organism"
+  );
+  elite_data_file->AddFun<double>(
+    [this]() {
+      return GetOrg(elite_pos).GetAggregate();
+    },
+    "aggregate_score",
+    "Aggregate score of elite organism"
+  );
+  elite_data_file->AddFun<size_t>(
+    [this]() {
+      return GetOrg(elite_pos).GetStart();
+    },
+    "start_pos",
+    "Activation gene for elite organism"
+  );
+  elite_data_file->PrintHeaderKeys();
 
   std::cout << "Finished setting data tracking!\n" << std::endl;
 }
@@ -851,23 +889,12 @@ void DiagWorld::RecordData()
   emp_assert(parent_vec.size() == config.POP_SIZE()); // should be set already
 
   /// update the file
-  data_file.Update();
-
-  // record elite solution traits
-  std::string traits = std::to_string(update);
-  Org & ele = *pop[elite_pos];
-  const auto & g = ele.GetScore();
-  for(size_t i = 0; i < g.size(); ++i)
-  {
-    traits += ",";
-    traits += std::to_string(g[i]);
-  }
-  elite_csv << traits << "\n";
-
+  data_file->Update();
+  elite_data_file->Update();
 
   // output this so we know where we are in terms of generations and fitness
-  Org & org = *pop[elite_pos];
-  Org & opt = *pop[opti_pos];
+  Org & org = GetOrg(elite_pos);
+  Org & opt = GetOrg(opti_pos);
   std::cout << "gen=" << GetUpdate() << ", max_fit=" << org.GetAggregate()  << ", max_opt=" << opt.GetCount() << std::endl;
 }
 
