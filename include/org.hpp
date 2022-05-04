@@ -1,13 +1,13 @@
 /// digital organisms (real number vectors) for the diagnostic experiments
 
-#ifndef ORG_H
-#define ORG_H
+#ifndef ORG_HPP
+#define ORG_HPP
 
 ///< standard headers
 #include <algorithm>
 
 ///< empirical headers
-#include "base/vector.h"
+#include "emp/base/vector.hpp"
 
 ///< coordiante we start from
 constexpr double START_DB = 0.0;

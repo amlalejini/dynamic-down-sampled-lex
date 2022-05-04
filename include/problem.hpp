@@ -1,12 +1,12 @@
 /// Set of diagnostic problems being used in research project
-#ifndef PROBLEM_H
-#define PROBLEM_H
+#ifndef PROBLEM_HPP
+#define PROBLEM_HPP
 
 ///< standard headers
 #include <algorithm>
 
 ///< empirical headers
-#include "base/vector.h"
+#include "emp/base/vector.hpp"
 
 class Diagnostic
 {

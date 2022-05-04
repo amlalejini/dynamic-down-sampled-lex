@@ -1,7 +1,7 @@
 /// World that will manage solutions during the evolutionary run
 
-#ifndef DIA_WORLD_H
-#define DIA_WORLD_H
+#ifndef DIA_WORLD_HPP
+#define DIA_WORLD_HPP
 
 ///< standard headers
 #include <functional>
@@ -16,13 +16,13 @@
 #include <deque>
 
 ///< empirical headers
-#include "Evolve/World.h"
+#include "emp/Evolve/World.hpp"
 
 ///< experiment headers
-#include "config.h"
-#include "org.h"
-#include "problem.h"
-#include "selection.h"
+#include "config.hpp"
+#include "org.hpp"
+#include "problem.hpp"
+#include "selection.hpp"
 
 class DiagWorld : public emp::World<Org>
 {

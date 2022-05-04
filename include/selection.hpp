@@ -2,8 +2,8 @@
 /// Will be broken up according to my thoughts on how $$ components work
 /// These selection functions are selecting on the assumption that the problem is a maximization problem
 
-#ifndef SEL_H
-#define SEL_H
+#ifndef SEL_HPP
+#define SEL_HPP
 
 ///< standard headers
 #include <algorithm>
@@ -14,9 +14,9 @@
 #include <set>
 
 ///< empirical headers
-#include "base/vector.h"
-#include "tools/Random.h"
-#include "tools/random_utils.h"
+#include "emp/base/vector.hpp"
+#include "emp/math/Random.hpp"
+#include "emp/math/random_utils.hpp"
 
 ///< constant vars
 constexpr size_t DRIFT_SIZE = 1;

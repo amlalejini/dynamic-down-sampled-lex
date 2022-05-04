@@ -1,14 +1,15 @@
 // This is the main function for the NATIVE version of this project.
 
 #include <iostream>
+#include <limits>
 
-#include "base/vector.h"
-#include "config/command_line.h"
-#include "config/ArgManager.h"
+#include "emp/base/vector.hpp"
+#include "emp/config/command_line.hpp"
+#include "emp/config/ArgManager.hpp"
 
-#include "../config.h"
-#include "../world.h"
-#include "../org.h"
+#include "config.hpp"
+#include "world.hpp"
+#include "org.hpp"
 
 // Hello world
 
