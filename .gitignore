@@ -1,0 +1,47 @@
+*~
+*.debug
+*.dSYM
+*.gcov
+*.js.mem
+*.map
+*.mp4
+*.o
+*.out
+*.pyc
+*.swp
+*.swo
+*.wasm
+*.wast
+*-bak.cpp
+*tmp.*
+
+.DS_Store
+a.out
+a.out.js
+
+build/
+doc/_build/
+
+package-lock.json
+node_modules/
+coverage_include/
+
+diagnostics-suite
+debug_file
+*.cfg
+output/
+*.tar.gz
+
+pyenv/
+data/
+
+# Root directory scratch files
+time-exec.sh
+local/
+
+# Editor cfg files
+.vscode
+
+# Compiled supplemental material
+_book/
+_bookdown_files/
