@@ -7,18 +7,18 @@
 #include "emp/config/command_line.hpp"
 #include "emp/config/ArgManager.hpp"
 
-#include "config.hpp"
-#include "world.hpp"
-#include "org.hpp"
+#include "diagnostics/config.hpp"
+#include "diagnostics/world.hpp"
+#include "diagnostics/org.hpp"
 
 // Hello world
 
 int main(int argc, char* argv[])
 {
-  DiaConfig config;
-  config.Read("Dia.cfg", false);
+  diag::DiaConfig config;
+  config.Read("diagnostics.cfg", false);
   auto args = emp::cl::ArgManager(argc, argv);
-  if (args.ProcessConfigOptions(config, std::cout, "Dia.cfg", "Dia-macros.h") == false) exit(0);
+  if (args.ProcessConfigOptions(config, std::cout, "diagnostics.cfg", "diagnostics-macros.h") == false) exit(0);
   if (args.TestUnknown() == false) exit(0);  // If there are leftover args, throw an error.
 
   std::cout << "==============================" << std::endl;
@@ -29,10 +29,10 @@ int main(int argc, char* argv[])
             << std::endl;
 
 
-  DiagWorld world(config);
+  diag::DiagWorld world(config);
 
-  for (size_t ud = 0; ud <= config.MAX_GENS(); ud++)
-  {
-    world.Update();
-  }
+  // for (size_t ud = 0; ud <= config.MAX_GENS(); ud++)
+  // {
+  //   world.Update();
+  // }
 }
