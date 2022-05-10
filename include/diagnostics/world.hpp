@@ -149,6 +149,43 @@ class DiagWorld : public emp::World<Org>
     // archive activation gene vector
     optimal_t arc_acti_gene;
 
+    // lexicase - sampled test cases
+    emp::vector<size_t> sampled_trait_ids;
+    emp::vector<size_t> possible_trait_ids;
+    std::function<void()> do_sample_traits;
+    emp::vector< emp::vector<double> > test_score_matrix; // [test_id][org_id]
+
+    void SetupTraitSampling();
+    double PhenDist(
+      const emp::vector<double>& a,
+      const emp::vector<double>& b
+    ) {
+      if (a.size() != b.size()) {
+        return PhenDistDiffLengths(a, b);
+      }
+      emp_assert(a.size() == b.size());
+      double total = 0.0;
+      for (size_t i = 0; i < a.size(); ++i) {
+        total += emp::Abs(a[i] - b[i]);
+      }
+      return total;
+    }
+    double PhenDistDiffLengths(
+      const emp::vector<double>& a,
+      const emp::vector<double>& b
+    ) {
+      auto& larger = (a.size() >= b.size()) ? a : b;
+      auto& smaller = (a.size() >= b.size()) ? b : a;
+      double total = 0.0;
+      for (size_t i = 0; i < smaller.size(); ++i) {
+        total += emp::Abs(smaller[i] - larger[i]);
+      }
+      for (size_t i = smaller.size(); i < larger.size(); ++i) {
+        total += emp::Abs(larger[i]);
+      }
+      return total;
+    }
+
     // ---- call all functions to initiallize the world ----
     void Initialize();
     void SetOnUpdate();
@@ -173,6 +210,9 @@ class DiagWorld : public emp::World<Org>
     void EpsilonLexicase();
     void NonDominatedSorting();
     void NoveltySearch();
+
+    void Lexicase();
+    // void DownSampledLexicase();
 
     // ---- evaluation function implementations ----
     void Exploitation();
@@ -343,8 +383,10 @@ void DiagWorld::SetSelection()
   std::cout << "------------------------------------------------" << std::endl;
   std::cout << "Setting Selection function..." << std::endl;
 
-  selection = emp::NewPtr<Selection>(random_ptr);
+  selection = emp::NewPtr<Selection>(*random_ptr);
   std::cout << "Created selection" << std::endl;
+
+  do_sample_traits = []() { /*do nothing by default*/; };
 
   switch (config.SELECTION())
   {
@@ -360,9 +402,15 @@ void DiagWorld::SetSelection()
       FitnessSharing();
       break;
 
-    case static_cast<size_t>(Scheme::LEXICASE):
-      EpsilonLexicase();
+    case static_cast<size_t>(Scheme::LEXICASE): {
+      SetupTraitSampling();
+      if (config.LEX_EPS() == 0) {
+        Lexicase();
+      } else {
+        EpsilonLexicase();
+      }
       break;
+    }
 
     case static_cast<size_t>(Scheme::NONDOMINATED):
       NonDominatedSorting();
@@ -378,7 +426,120 @@ void DiagWorld::SetSelection()
       break;
   }
 
+
+
   std::cout << "Finished setting the Selection function! \n" << std::endl;
+}
+
+void DiagWorld::SetupTraitSampling() {
+  std::cout << "Setting up trait sampling." << std::endl;
+  // Setup trait sampling
+  sampled_trait_ids.resize(config.OBJECTIVE_CNT(), 0);
+  std::iota(
+    sampled_trait_ids.begin(),
+    sampled_trait_ids.end(),
+    0
+  );
+  possible_trait_ids.resize(config.OBJECTIVE_CNT(), 0);
+  std::iota(
+    possible_trait_ids.begin(),
+    possible_trait_ids.end(),
+    0
+  );
+  emp_assert(config.LEX_DS_RATE() <= 1.0 && config.LEX_DS_RATE() > 0.0);
+  emp_assert((config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT()) > 0);
+
+  if (config.LEX_DS_MODE() == "random") {
+    std::cout << "  Sample type: random" << std::endl;
+    do_sample_traits = [this]() {
+      // calculate the sample size
+      const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      sampled_trait_ids.resize(sample_size, 0);
+      emp_assert(sampled_trait_ids.size() <= possible_trait_ids.size(), "The number of sampled traits should be <= than the total number of traits");
+      emp::Shuffle(GetRandom(), possible_trait_ids);
+      for (size_t i = 0; i < sampled_trait_ids.size(); ++i) {
+        sampled_trait_ids[i] = possible_trait_ids[i];
+      }
+    };
+
+  } else if (config.LEX_DS_MODE() == "maxmin") {
+    // full info maxmin
+    std::cout << "  Sample type: maxmin" << std::endl;
+    // TODO - check that this works as expected
+    do_sample_traits = [this]() {
+      // calculate the sample size
+      const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      emp_assert(sampled_trait_ids.size() <= possible_trait_ids.size(), "The number of sampled traits should be <= than the total number of traits");
+
+      emp::vector<size_t> available_ids(possible_trait_ids.size(), 0);
+      std::copy(
+        possible_trait_ids.begin(),
+        possible_trait_ids.end(),
+        available_ids.begin()
+      );
+      emp::Shuffle(GetRandom(), available_ids);
+      std::unordered_set<size_t> included_ids;
+      sampled_trait_ids.clear();
+      sampled_trait_ids.emplace_back(available_ids.back());
+      available_ids.pop_back();
+
+      emp::vector< emp::vector<double> > dist_cache(possible_trait_ids.size(), emp::vector<double>(possible_trait_ids.size(), -1));
+
+      while (sampled_trait_ids.size() < sample_size) {
+        // Find available id with the maximum min distance to a chosen id
+        double maxmin_dist = -1;
+        size_t maxmin_id = 0;
+        size_t maxmin_avail_idx = 0;
+
+        // For each possible test to be sampled, find its minimum distance to an already sampled test.
+        for (size_t avail_idx = 0; avail_idx < available_ids.size(); ++avail_idx) {
+          size_t cur_id = available_ids[avail_idx];
+          double cur_min_dist = 0; // find minimum distance between current availble id and all already sampled ids
+          const auto& cur_test_profile = test_score_matrix[cur_id];
+
+          for (size_t sampled_idx = 0; sampled_idx < sampled_trait_ids.size(); ++sampled_idx) {
+            const size_t sampled_id = sampled_trait_ids[sampled_idx];
+            emp_assert(sampled_id != cur_id); // An available ID should never already be sampled.
+            double dist=0.0;
+            if (dist_cache[cur_id][sampled_id] != -1) {
+              dist = dist_cache[cur_id][sampled_id];
+            } else {
+              const auto& sampled_test_profile = test_score_matrix[sampled_id];
+              dist = PhenDist(sampled_test_profile, cur_test_profile);
+              dist_cache[cur_id][sampled_id] = dist;
+              dist_cache[sampled_id][cur_id] = dist;
+            }
+            if (dist == 0) break; // Not going to get bigger than zero.
+            if (sampled_idx == 0 || dist < cur_min_dist) {
+              cur_min_dist = dist;
+            }
+          }
+
+          if ( avail_idx==0 || cur_min_dist > maxmin_dist ) {
+            maxmin_dist = cur_min_dist;
+            maxmin_id = cur_id;
+            maxmin_avail_idx = avail_idx;
+          }
+
+        }
+
+        // move sampled id to back of available
+        std::swap(available_ids[maxmin_avail_idx], available_ids[available_ids.size()-1]);
+        emp_assert(available_ids.back() == maxmin_id);
+        available_ids.pop_back();
+        sampled_trait_ids.emplace_back(maxmin_id);
+      }
+    };
+
+  } else if (config.LEX_DS_MODE() == "none") {
+    std::cout << "  Sample type: none" << std::endl;
+    do_sample_traits = []() { /*do nothing by default*/; };
+
+  } else {
+    std::cout << "  Unknown sample type." << std::endl;
+    exit(-1);
+  }
+
 }
 
 void DiagWorld::SetOnOffspringReady()
@@ -428,6 +589,8 @@ void DiagWorld::SetEvaluation()
 
   diagnostic = emp::NewPtr<Diagnostic>(target, config.CREDIT());
   std::cout << "Created diagnostic emp::Ptr" << std::endl;
+
+  test_score_matrix.resize(config.OBJECTIVE_CNT(), emp::vector<double>(config.POP_SIZE(), 0));
 
   switch (config.DIAGNOSTIC())
   {
@@ -826,24 +989,32 @@ void DiagWorld::ResetData()
 void DiagWorld::EvaluationStep()
 {
   // quick checks
-  emp_assert(fit_vec.size() == 0); emp_assert(0 < pop.size());
+  emp_assert(fit_vec.size() == 0);
+  emp_assert(0 < pop.size());
   emp_assert(pop.size() == config.POP_SIZE());
 
   // iterate through the world and populate fitness vector
   fit_vec.resize(config.POP_SIZE());
-  for(size_t i = 0; i < pop.size(); ++i)
-  {
-    Org & org = *pop[i];
+  for(size_t org_id = 0; org_id < pop.size(); ++org_id) {
+    Org& org = GetOrg(org_id);
 
     // no evaluate needed if offspring is a clone
-    fit_vec[i] = (org.GetClone()) ? org.GetAggregate() : evaluate(org);
+    fit_vec[org_id] = (org.GetClone()) ? org.GetAggregate() : evaluate(org);
+
+    // Fill out test matrix
+    for (size_t test_id = 0; test_id < test_score_matrix.size(); ++test_id) {
+      const emp::vector<double>& org_test_scores = org.GetScore();
+      emp_assert(test_id < org_test_scores.size());
+      test_score_matrix[test_id][org_id] = org_test_scores[test_id];
+    }
   }
 }
 
 void DiagWorld::SelectionStep()
 {
   // quick checks
-  emp_assert(parent_vec.size() == 0); emp_assert(0 < pop.size());
+  emp_assert(parent_vec.size() == 0);
+  emp_assert(0 < pop.size());
   emp_assert(pop.size() == config.POP_SIZE());
 
   // store parents
@@ -905,7 +1076,9 @@ void DiagWorld::ReproductionStep()
   emp_assert(pop.size() == config.POP_SIZE());
 
   // go through parent ids and do births
-  for(auto & id : parent_vec){DoBirth(GetGenomeAt(id), id);}
+  for(auto & id : parent_vec){
+    DoBirth(GetGenomeAt(id), id);
+  }
 }
 
 
@@ -978,7 +1151,7 @@ void DiagWorld::FitnessSharing()
     if(config.FIT_SIGMA() == 0.0)
     {
       // do stochastic remainder selection with unmodified fitness
-      return selection->StochasticRemainder(fit_vec);;
+      return selection->StochasticRemainder(fit_vec);
     }
 
     // are we using genomes or phenotypes for similarity comparison?
@@ -994,6 +1167,28 @@ void DiagWorld::FitnessSharing()
   std::cout << "Fitness sharing selection scheme set!" << std::endl;
 }
 
+void DiagWorld::Lexicase() {
+  std::cout << "Setting selection scheme: Lexicase" << std::endl;
+
+  // note - these select functions could also be made faster by not returning a copy of the selected parents
+  select = [this]() {
+    emp_assert(selection);
+    emp_assert(pop.size() == config.POP_SIZE());
+    emp_assert(0 < pop.size());
+
+    fmatrix_t matrix = PopFitMat(); // NOTE - this could be made faster
+
+    do_sample_traits();
+    return selection->Lexicase(
+      matrix,
+      pop.size(),
+      sampled_trait_ids
+    );
+
+  };
+
+}
+
 void DiagWorld::EpsilonLexicase()
 {
   std::cout << "Setting selection scheme: EpsilonLexicase" << std::endl;
@@ -1002,20 +1197,19 @@ void DiagWorld::EpsilonLexicase()
   select = [this]()
   {
     // quick checks
-    emp_assert(selection); emp_assert(pop.size() == config.POP_SIZE());
+    emp_assert(selection);
+    emp_assert(pop.size() == config.POP_SIZE());
     emp_assert(0 < pop.size());
 
-    fmatrix_t matrix = PopFitMat();
+    fmatrix_t matrix = PopFitMat(); // NOTE - this could be made faster if we didn't copy this matrix and instead used a reference
 
-    // select parent ids
-    ids_t parent(pop.size());
-
-    for(size_t i = 0; i < parent.size(); ++i)
-    {
-      parent[i] = selection->EpsiLexicase(matrix, config.LEX_EPS(), config.OBJECTIVE_CNT());
-    }
-
-    return parent;
+    do_sample_traits();
+    return selection->EpsilonLexicase(
+      matrix,
+      config.LEX_EPS(),
+      pop.size(),
+      sampled_trait_ids
+    );
   };
 
   std::cout << "Epsilon Lexicase selection scheme set!" << std::endl;

@@ -47,10 +47,22 @@ class Selection
     // pairing of position_id and fitness associated with id
     using id_f_t = std::pair<size_t,double>;
 
+  private:
+
+    // random pointer from world.h
+    // emp::Ptr<emp::Random> random;
+    emp::Random& random;
+    emp::vector<size_t> lex_fun_ordering; ///< Used to track function ordering for lexicase selection
+    emp::vector<size_t> lex_selected;
+    // todo - Have a 'selected'?
 
   public:
 
-    Selection(emp::Ptr<emp::Random> rng = nullptr) : random(rng) {emp_assert(rng);}
+    Selection(
+      emp::Random& rng
+    ) :
+      random(rng)
+    { }
 
     ///< sanity check functions
 
@@ -383,10 +395,18 @@ class Selection
      */
     ids_t StochasticRemainder(const score_t & scores);
 
-  private:
+    emp::vector<size_t>& Lexicase(
+      const fmatrix_t& mscore,
+      size_t n=1,
+      const emp::vector<size_t>& trait_ids=emp::vector<size_t>()
+    );
 
-    // random pointer from world.h
-    emp::Ptr<emp::Random> random;
+    emp::vector<size_t>& EpsilonLexicase(
+      const fmatrix_t& mscore,
+      double epsilon,
+      size_t n=1,
+      const emp::vector<size_t>& trait_ids=emp::vector<size_t>()
+    );
 };
 
 ///< population structure
@@ -856,7 +876,7 @@ Selection::ids_t Selection::MLSelect(const size_t mu, const size_t lambda, const
   for(auto & g : group)
   {
     auto gt = g.second;
-    emp::Shuffle(*random, gt);
+    emp::Shuffle(random, gt);
     for(auto id : gt)
     {
       topmu.push_back(id);
@@ -886,7 +906,7 @@ size_t Selection::Tournament(const size_t t, const score_t & score)
   emp_assert(t <= score.size());
 
   // get tournament ids
-  emp::vector<size_t> tour = emp::Choose(*random, score.size(), t);
+  emp::vector<size_t> tour = emp::Choose(random, score.size(), t);
 
   // store all scores for the tournament
   emp::vector<double> subscore(t);
@@ -897,7 +917,7 @@ size_t Selection::Tournament(const size_t t, const score_t & score)
   emp::vector<size_t> opt = group.begin()->second;
 
   //shuffle the vector with best fitness ids
-  emp::Shuffle(*random, opt);
+  emp::Shuffle(random, opt);
   emp_assert(0 < opt.size());
 
   return tour[opt[0]];
@@ -909,7 +929,7 @@ size_t Selection::Drift(const size_t size)
   emp_assert(size > 0);
 
   // return a random org id
-  auto win = emp::Choose(*random, size, DRIFT_SIZE);
+  auto win = emp::Choose(random, size, DRIFT_SIZE);
   emp_assert(win.size() == DRIFT_SIZE);
 
   return win[0];
@@ -923,7 +943,7 @@ size_t Selection::EpsiLexicase(const fmatrix_t & mscore, const double epsi, cons
   // create vector of shuffled testcase ids
   ids_t test_id(M);
   std::iota(test_id.begin(), test_id.end(), 0);
-  emp::Shuffle(*random, test_id);
+  emp::Shuffle(random, test_id);
 
   // vector to hold filterd elite solutions
   ids_t filter(mscore.size());
@@ -968,9 +988,164 @@ size_t Selection::EpsiLexicase(const fmatrix_t & mscore, const double epsi, cons
 
   // Get a random position from the remaining filtered solutions (may be one left too)
   emp_assert(0 < filter.size());
-  size_t wid = emp::Choose(*random, filter.size(), 1)[0];
+  size_t wid = emp::Choose(random, filter.size(), 1)[0];
 
   return filter[wid];
+}
+
+emp::vector<size_t>& Selection::Lexicase(
+  const fmatrix_t& mscore,
+  size_t n/*=1*/,
+  const emp::vector<size_t>& trait_ids/*=emp::vector<size_t>()*/
+) {
+  emp_assert(n > 0);
+  const size_t num_candidates = mscore.size();
+  emp_assert(num_candidates > 0);
+  const size_t total_traits = mscore[0].size();
+  emp_assert(trait_ids.size() <= total_traits);
+
+  lex_selected.resize(n, 0);
+
+  // What traits do we use to do selection?
+  if (trait_ids.size() == 0) {
+    // use all traits
+    lex_fun_ordering.resize(total_traits);
+    std::iota(
+      lex_fun_ordering.begin(),
+      lex_fun_ordering.end(),
+      0
+    );
+  } else {
+    // use given trait ids
+    lex_fun_ordering.resize(trait_ids.size());
+    for (size_t fun_i = 0; fun_i < lex_fun_ordering.size(); ++fun_i) {
+      lex_fun_ordering[fun_i] = trait_ids[fun_i];
+    }
+  }
+
+  // Initialize the pool of all candidates for selection
+  emp::vector<size_t> all_candidates(num_candidates);
+  std::iota(
+    all_candidates.begin(),
+    all_candidates.end(),
+    0
+  );
+
+  // Declare pools for use during selection filtering
+  emp::vector<size_t> cur_pool, next_pool;
+  for (size_t sel_i = 0; sel_i < n; ++sel_i) {
+    // Randomize the lexicase fitness function ordering
+    emp::Shuffle(random, lex_fun_ordering);
+    // Step through each 'test case'
+    cur_pool = all_candidates;
+    int depth = -1;
+    // For each test case, filter the population down to only the best performers.
+    for (size_t fun_id : lex_fun_ordering) {
+      ++depth;
+      double max_score =  mscore[cur_pool[0]][fun_id];     // Max score starts as the first candidate's score on this function.
+      next_pool.push_back(cur_pool[0]);                    // Seed the keeper pool with the first candidate.
+
+      for (size_t i = 1; i < cur_pool.size(); ++i) {
+        const size_t cand_id = cur_pool[i];
+        const double cur_score = mscore[cand_id][fun_id];
+        if (cur_score > max_score) {
+          max_score = cur_score;              // This is the new max score for this function
+          next_pool.resize(1);                // Clear out candidates with the former max score for this function.
+          next_pool[0] = cand_id;             // Add this candidate as the only one with the new max score.
+        } else if (cur_score == max_score) {
+          next_pool.emplace_back(cand_id);    // Same as current max score. Save this candidate too.
+        }
+      }
+      // Make next_pool into new cur_pool; make cur_pool allocated space for next_pool
+      std::swap(cur_pool, next_pool);
+      next_pool.resize(0);
+      if (cur_pool.size() == 1) break; // Step if we're down to just one candidate.
+    }
+    // Select a random survivor (all equal at this point)
+    emp_assert(cur_pool.size() > 0);
+    const size_t win_id = cur_pool[random.GetUInt(cur_pool.size())];
+    lex_selected[sel_i] = win_id;
+  }
+  return lex_selected;
+}
+
+emp::vector<size_t>& Selection::EpsilonLexicase(
+      const fmatrix_t& mscore,
+      double epsilon,
+      size_t n/*=1*/,
+      const emp::vector<size_t>& trait_ids/*=emp::vector<size_t>()*/
+) {
+  emp_assert(epsilon >= 0);
+  emp_assert(n > 0);
+  const size_t num_candidates = mscore.size();
+  emp_assert(num_candidates > 0);
+  const size_t total_traits = mscore[0].size();
+  emp_assert(trait_ids.size() <= total_traits);
+
+  lex_selected.resize(n, 0);
+
+  // What traits do we use to do selection?
+  if (trait_ids.size() == 0) {
+    // use all traits
+    lex_fun_ordering.resize(total_traits);
+    std::iota(
+      lex_fun_ordering.begin(),
+      lex_fun_ordering.end(),
+      0
+    );
+  } else {
+    // use given trait ids
+    lex_fun_ordering.resize(trait_ids.size());
+    for (size_t fun_i = 0; fun_i < lex_fun_ordering.size(); ++fun_i) {
+      lex_fun_ordering[fun_i] = trait_ids[fun_i];
+    }
+  }
+
+  // Initialize the pool of all candidates for selection
+  emp::vector<size_t> all_candidates(num_candidates);
+  std::iota(
+    all_candidates.begin(),
+    all_candidates.end(),
+    0
+  );
+
+  // Declare pools for use during selection filtering
+  emp::vector<size_t> cur_pool, next_pool;
+  for (size_t sel_i = 0; sel_i < n; ++sel_i) {
+    // Randomize the lexicase fitness function ordering
+    emp::Shuffle(random, lex_fun_ordering);
+    // Step through each 'test case'
+    cur_pool = all_candidates;
+    int depth = -1;
+    // For each test case, filter the population down to only the best performers.
+    for (size_t fun_id : lex_fun_ordering) {
+      ++depth;
+      double max_score =  mscore[cur_pool[0]][fun_id];     // Max score starts as the first candidate's score on this function.
+      double thresh_score = max_score + epsilon;
+      next_pool.push_back(cur_pool[0]);                    // Seed the keeper pool with the first candidate.
+
+      for (size_t i = 1; i < cur_pool.size(); ++i) {
+        const size_t cand_id = cur_pool[i];
+        const double cur_score = mscore[cand_id][fun_id];
+        if (cur_score > thresh_score) {
+          max_score = cur_score;              // This is the new max score for this function
+          next_pool.resize(1);                // Clear out candidates with the former max score for this function.
+          next_pool[0] = cand_id;             // Add this candidate as the only one with the new max score.
+        } else if (emp::Abs(cur_score - max_score) <= epsilon) {
+          next_pool.emplace_back(cand_id);    // Same as current max score. Save this candidate too.
+        }
+      }
+      // Make next_pool into new cur_pool; make cur_pool allocated space for next_pool
+      std::swap(cur_pool, next_pool);
+      next_pool.resize(0);
+      if (cur_pool.size() == 1) break; // Step if we're down to just one candidate.
+    }
+    // Select a random survivor (all equal at this point)
+    emp_assert(cur_pool.size() > 0);
+    const size_t win_id = cur_pool[random.GetUInt(cur_pool.size())];
+    lex_selected[sel_i] = win_id;
+  }
+  return lex_selected;
 }
 
 Selection::ids_t Selection::StochasticRemainder(const score_t & scores)
@@ -1015,7 +1190,7 @@ Selection::ids_t Selection::StochasticRemainder(const score_t & scores)
   while (parents.size() != scores.size())
   {
     //shuffle order in which solutions are being processed
-    emp::Shuffle(*random, order);
+    emp::Shuffle(random, order);
 
     // go through and do expected insertions
     for(const auto & o : order)
@@ -1037,7 +1212,7 @@ Selection::ids_t Selection::StochasticRemainder(const score_t & scores)
         if(parents.size() == scores.size()) {break;}
       }
       // fraction part is probability of being added again, if possible
-      if(random->P(fractPart) && parents.size() < scores.size())
+      if(random.P(fractPart) && parents.size() < scores.size())
       {
         parents.push_back(id);
       }

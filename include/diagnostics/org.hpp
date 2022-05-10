@@ -25,6 +25,46 @@ class Org
     // optimal gene vector type
     using optimal_t = emp::vector<bool>;
 
+  private:
+    // organism genome vector
+    genome_t genome;
+
+    // organism score vector
+    score_t score;
+    // score vector set?
+    bool scored = false;
+
+    // organims gene optimal vector
+    optimal_t optimal;
+    // gene optimal vector calculated?
+    bool opti = false;
+
+    // optimal gene count
+    size_t count = 0;
+    // gene optimal vector counted?
+    bool counted = false;
+
+    // aggregate score
+    double agg_score = 0.0;
+    // aggregate calculate?
+    bool aggregated = false;
+
+    // streak count
+    size_t streak = 0;
+    // streak calculated?
+    bool streaked = false;
+
+    // Number of genes in genome
+    size_t M = 0;
+
+    // starting position
+    size_t start_pos;
+    // starting position located?
+    bool start = false;
+
+    // Are we a clone?
+    bool clone = false;
+
   public:
     // for initial population
     Org(size_t _m)
@@ -220,46 +260,6 @@ class Org
      * Will set the clone variable to true.
     */
     void MeClone() {emp_assert(0 < M); emp_assert(!clone); clone = true;}
-
-  private:
-    // organism genome vector
-    genome_t genome;
-
-    // organism score vector
-    score_t score;
-    // score vector set?
-    bool scored = false;
-
-    // organims gene optimal vector
-    optimal_t optimal;
-    // gene optimal vector calculated?
-    bool opti = false;
-
-    // optimal gene count
-    size_t count = 0;
-    // gene optimal vector counted?
-    bool counted = false;
-
-    // aggregate score
-    double agg_score = 0.0;
-    // aggregate calculate?
-    bool aggregated = false;
-
-    // streak count
-    size_t streak = 0;
-    // streak calculated?
-    bool streaked = false;
-
-    // Number of genes in genome
-    size_t M = 0;
-
-    // starting position
-    size_t start_pos;
-    // starting position located?
-    bool start = false;
-
-    // Are we a clone?
-    bool clone = false;
 };
 
 ///< getters with extra
