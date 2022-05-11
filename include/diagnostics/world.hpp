@@ -198,29 +198,28 @@ class DiagWorld : public emp::World<Org>
 
     // ---- principle steps during an evolutionary run ----
     void ResetData();
-    void EvaluationStep();
-    void SelectionStep();
-    void ReproductionStep();
+    void DoEvaluationStep();
+    void DoSelectionStep();
+    void DoReproductionStep();
     void RecordData();
 
     // ---- selection scheme implementations ----
-    void Truncation();
-    void Tournament();
-    void FitnessSharing();
-    void EpsilonLexicase();
-    void NonDominatedSorting();
-    void NoveltySearch();
-
-    void Lexicase();
-    void LexicaseEvenLead();
+    void SetupSelection_Truncation();
+    void SetupSelection_Tournament();
+    void SetupSelection_FitnessSharing();
+    void SetupSelection_EpsilonLexicase();
+    void SetupSelection_NonDominatedSorting();
+    void SetupSelection_NoveltySearch();
+    void SetupSelection_Lexicase();
+    void SetupSelection_LexicaseEvenLead();
     // void DownSampledLexicase();
 
     // ---- evaluation function implementations ----
-    void Exploitation();
-    void StructuredExploitation();
-    void StrongEcology();
-    void Exploration();
-    void WeakEcology();
+    void SetupDiagnostic_Exploitation();
+    void SetupDiagnostic_StructuredExploitation();
+    void SetupDiagnostic_StrongEcology();
+    void SetupDiagnostic_Exploration();
+    void SetupDiagnostic_WeakEcology();
 
     // ---- data tracking ----
     size_t UniqueObjective();
@@ -318,16 +317,16 @@ void DiagWorld::SetOnUpdate()
     ResetData();
 
     // step 1: evaluate all solutions on diagnostic
-    EvaluationStep();
+    DoEvaluationStep();
 
     // step 2: select parent solutions for
-    SelectionStep();
+    DoSelectionStep();
 
     // step 3: gather and record data
     RecordData();
 
     // step 4: reproduce and create new solutions
-    ReproductionStep();
+    DoReproductionStep();
   });
 
   std::cout << "Finished setting the OnUpdate function! \n" << std::endl;
@@ -390,24 +389,24 @@ void DiagWorld::SetSelection()
   do_sample_traits = []() { /*do nothing by default*/; };
 
   if (config.SELECTION() == "truncation") {
-    Truncation();
+    SetupSelection_Truncation();
   } else if (config.SELECTION() == "tournament") {
-    Tournament();
+    SetupSelection_Tournament();
   } else if (config.SELECTION() == "fitness-sharing") {
-    FitnessSharing();
+    SetupSelection_FitnessSharing();
   } else if (config.SELECTION() == "lexicase") {
     SetupTraitSampling();
-    Lexicase();
+    SetupSelection_Lexicase();
   } else if (config.SELECTION() == "lexicase-eps") {
     SetupTraitSampling();
-    EpsilonLexicase();
+    SetupSelection_EpsilonLexicase();
   } else if (config.SELECTION() == "lexicase-even-lead") {
     SetupTraitSampling();
-    LexicaseEvenLead();
+    SetupSelection_LexicaseEvenLead();
   } else if (config.SELECTION() == "nondominated-sorting") {
-    NonDominatedSorting();
+    SetupSelection_NonDominatedSorting();
   } else if (config.SELECTION() == "novelty") {
-    NoveltySearch();
+    SetupSelection_NoveltySearch();
   } else {
     std::cout << "ERROR UNKNOWN SELECTION CALL, " << config.SELECTION() << std::endl;
     emp_assert(false);
@@ -717,32 +716,19 @@ void DiagWorld::SetEvaluation()
 
   test_score_matrix.resize(config.OBJECTIVE_CNT(), emp::vector<double>(config.POP_SIZE(), 0));
 
-  switch (config.DIAGNOSTIC())
-  {
-    case 0: // exploitation
-      Exploitation();
-      break;
-
-    case 1: // structured exploitation
-      StructuredExploitation();
-      break;
-
-    case 2: // strong ecology
-      StrongEcology();
-      break;
-
-    case 3: // exploration
-      Exploration();
-      break;
-
-    case 4: // weak ecology
-      WeakEcology();
-      break;
-
-    default: // error, unknown diganotic
-      std::cout << "ERROR: UNKNOWN DIAGNOSTIC" << std::endl;
-      emp_assert(true);
-      break;
+  if (config.DIAGNOSTIC() == "exploitation") {
+    SetupDiagnostic_Exploitation();
+  } else if (config.DIAGNOSTIC() == "struct-exploitation") {
+    SetupDiagnostic_StructuredExploitation();
+  } else if (config.DIAGNOSTIC() == "strong-ecology") {
+    SetupDiagnostic_StrongEcology();
+  } else if (config.DIAGNOSTIC() == "weak-ecology") {
+    SetupDiagnostic_WeakEcology();
+  } else if (config.DIAGNOSTIC() == "exploration") {
+    SetupDiagnostic_Exploration();
+  } else {
+    std::cout << "ERROR: UNKNOWN DIAGNOSTIC, " << config.DIAGNOSTIC() << std::endl;
+    exit(-1);
   }
 
   std::cout << "Evaluation function set!\n" <<std::endl;
@@ -1111,7 +1097,7 @@ void DiagWorld::ResetData()
   pop_acti_gene.clear();
 }
 
-void DiagWorld::EvaluationStep()
+void DiagWorld::DoEvaluationStep()
 {
   // quick checks
   emp_assert(fit_vec.size() == 0);
@@ -1135,7 +1121,7 @@ void DiagWorld::EvaluationStep()
   }
 }
 
-void DiagWorld::SelectionStep()
+void DiagWorld::DoSelectionStep()
 {
   // quick checks
   emp_assert(parent_vec.size() == 0);
@@ -1194,7 +1180,7 @@ void DiagWorld::RecordData()
   std::cout << "gen=" << GetUpdate() << ", max_fit=" << org.GetAggregate()  << ", max_opt=" << opt.GetCount() << std::endl;
 }
 
-void DiagWorld::ReproductionStep()
+void DiagWorld::DoReproductionStep()
 {
   // quick checks
   emp_assert(parent_vec.size() == config.POP_SIZE());
@@ -1209,7 +1195,7 @@ void DiagWorld::ReproductionStep()
 
 ///< selection scheme implementations
 
-void DiagWorld::Truncation()
+void DiagWorld::SetupSelection_Truncation()
 {
   std::cout << "Setting selection scheme: Truncation" << std::endl;
 
@@ -1229,7 +1215,7 @@ void DiagWorld::Truncation()
   std::cout << "Truncation selection scheme set!" << std::endl;
 }
 
-void DiagWorld::Tournament()
+void DiagWorld::SetupSelection_Tournament()
 {
   std::cout << "Setting selection scheme: Tournament" << std::endl;
 
@@ -1254,7 +1240,7 @@ void DiagWorld::Tournament()
   std::cout << "Tournament selection scheme set!" << std::endl;
 }
 
-void DiagWorld::FitnessSharing()
+void DiagWorld::SetupSelection_FitnessSharing()
 {
   std::cout << "Setting selection scheme: FitnessSharing" << std::endl;
   std::cout << "Fitness Sharing applied on: ";
@@ -1292,7 +1278,7 @@ void DiagWorld::FitnessSharing()
   std::cout << "Fitness sharing selection scheme set!" << std::endl;
 }
 
-void DiagWorld::Lexicase() {
+void DiagWorld::SetupSelection_Lexicase() {
   std::cout << "Setting selection scheme: Lexicase" << std::endl;
 
   // note - these select functions could also be made faster by not returning a copy of the selected parents
@@ -1314,7 +1300,7 @@ void DiagWorld::Lexicase() {
 
 }
 
-void DiagWorld::LexicaseEvenLead() {
+void DiagWorld::SetupSelection_LexicaseEvenLead() {
   std::cout << "Setting selection scheme: LexicaseEvenLead" << std::endl;
 
   // note - these select functions could also be made faster by not returning a copy of the selected parents
@@ -1336,7 +1322,7 @@ void DiagWorld::LexicaseEvenLead() {
 
 }
 
-void DiagWorld::EpsilonLexicase()
+void DiagWorld::SetupSelection_EpsilonLexicase()
 {
   std::cout << "Setting selection scheme: EpsilonLexicase" << std::endl;
   std::cout << "Epsilon: " << config.LEX_EPS() << std::endl;
@@ -1362,7 +1348,7 @@ void DiagWorld::EpsilonLexicase()
   std::cout << "Epsilon Lexicase selection scheme set!" << std::endl;
 }
 
-void DiagWorld::NonDominatedSorting()
+void DiagWorld::SetupSelection_NonDominatedSorting()
 {
   std::cout << "Setting selection scheme: NonDominatedSorting" << std::endl;
 
@@ -1392,7 +1378,7 @@ void DiagWorld::NonDominatedSorting()
   std::cout << "NonDominated Sorting selection scheme set!" << std::endl;
 }
 
-void DiagWorld::NoveltySearch()
+void DiagWorld::SetupSelection_NoveltySearch()
 {
   std::cout << "Setting selection scheme: NoveltySearch" << std::endl;
   std::cout << "Starting PMIN: " << config.NOVEL_PMIN() << std::endl;
@@ -1462,7 +1448,7 @@ void DiagWorld::NoveltySearch()
 
 ///< evaluation function implementations
 
-void DiagWorld::Exploitation()
+void DiagWorld::SetupDiagnostic_Exploitation()
 {
   std::cout << "Setting exploitation diagnostic..." << std::endl;
 
@@ -1490,7 +1476,7 @@ void DiagWorld::Exploitation()
   std::cout << "Exploitation diagnotic set!" << std::endl;
 }
 
-void DiagWorld::StructuredExploitation()
+void DiagWorld::SetupDiagnostic_StructuredExploitation()
 {
   std::cout << "Setting structured exploitation diagnostic..." << std::endl;
 
@@ -1518,7 +1504,7 @@ void DiagWorld::StructuredExploitation()
   std::cout << "Structured exploitation diagnotic set!" << std::endl;
 }
 
-void DiagWorld::StrongEcology()
+void DiagWorld::SetupDiagnostic_StrongEcology()
 {
   std::cout << "Setting strong ecology diagnostic..." << std::endl;
 
@@ -1546,7 +1532,7 @@ void DiagWorld::StrongEcology()
   std::cout << "Strong ecology diagnotic set!" << std::endl;
 }
 
-void DiagWorld::Exploration()
+void DiagWorld::SetupDiagnostic_Exploration()
 {
   std::cout << "Setting exploration diagnostic..." << std::endl;
 
@@ -1574,7 +1560,7 @@ void DiagWorld::Exploration()
   std::cout << "Exploration diagnotic set!" << std::endl;
 }
 
-void DiagWorld::WeakEcology()
+void DiagWorld::SetupDiagnostic_WeakEcology()
 {
   std::cout << "Setting weak ecology diagnostic..." << std::endl;
 

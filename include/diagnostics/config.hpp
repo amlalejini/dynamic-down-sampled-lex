@@ -19,11 +19,10 @@ EMP_BUILD_CONFIG(DiaConfig,
   VALUE(ACCURACY, double, 0.99, "Accuracy percentage needed to be considered an optimal trait"),
   VALUE(CREDIT, double, 0.00, "Maximum credit a solution can get on an objective if applicable"),
   VALUE(OBJECTIVE_CNT, size_t, 100, "Number of traits an organism has"),
-  VALUE(SELECTION, std::string, "truncation", "Which selection are we doing? Options: truncation, tournament, fitness-sharing, lexicase, lexicase-eps, lexicase-even-lead, nondominated-sorting, novelty"),
-  //                             \n0: Truncation\n1: Tournament\n2: Fitness Sharing\n"
-  //                             "3: Lexicase\n4: Nondominated Sorting\n5: Novelty Search"),
-  VALUE(DIAGNOSTIC, size_t, 0, "Which diagnostic are we doing? \n0: Exploitation\n1: Structured Exploitation\n"
-                               "2: Strong Ecology \n3: Exploration \n4: Weak Ecology"),
+  VALUE(SELECTION, std::string, "truncation", "Which selection are we doing? Options: \ntruncation \ntournament \nfitness-sharing \nlexicase \nlexicase-eps lexicase-even-lead \nnondominated-sorting \nnovelty"),
+  VALUE(DIAGNOSTIC, std::string, "exploitation", "Which diagnostic should be run? Options: \nexploitation \nstruct-exploitation \nstrong-ecology \nweak-ecology \nexploration"),
+                              // "Which diagnostic are we doing? \n0: Exploitation\n1: Structured Exploitation\n"
+                              //  "2: Strong Ecology \n3: Exploration \n4: Weak Ecology"),
 
   GROUP(MUTATIONS, "Mutation rates for organisms."),
   VALUE(MUTATE_PER, double, 0.007, "Probability of instructions being mutated"),
