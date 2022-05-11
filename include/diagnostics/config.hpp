@@ -19,8 +19,9 @@ EMP_BUILD_CONFIG(DiaConfig,
   VALUE(ACCURACY, double, 0.99, "Accuracy percentage needed to be considered an optimal trait"),
   VALUE(CREDIT, double, 0.00, "Maximum credit a solution can get on an objective if applicable"),
   VALUE(OBJECTIVE_CNT, size_t, 100, "Number of traits an organism has"),
-  VALUE(SELECTION, size_t, 5, "Which selection are we doing? \n0: Truncation\n1: Tournament\n2: Fitness Sharing\n"
-                              "3: Lexicase\n4: Nondominated Sorting\n5: Novelty Search"),
+  VALUE(SELECTION, std::string, "truncation", "Which selection are we doing? Options: truncation, tournament, fitness-sharing, lexicase, lexicase-eps, lexicase-even-lead, nondominated-sorting, novelty"),
+  //                             \n0: Truncation\n1: Tournament\n2: Fitness Sharing\n"
+  //                             "3: Lexicase\n4: Nondominated Sorting\n5: Novelty Search"),
   VALUE(DIAGNOSTIC, size_t, 0, "Which diagnostic are we doing? \n0: Exploitation\n1: Structured Exploitation\n"
                                "2: Strong Ecology \n3: Exploration \n4: Weak Ecology"),
 
@@ -53,7 +54,8 @@ EMP_BUILD_CONFIG(DiaConfig,
   GROUP(LEXICASE, "Parameters for lexicase."), // 500 gens in 10 secs
   VALUE(LEX_EPS, double, 0.0, "Parameter estimate for lexicase epsilon."),
   VALUE(LEX_DS_RATE, double, 0.5, "Percent of test cases to sample for down-sampled lexicase?"),
-  VALUE(LEX_DS_MODE, std::string, "random", "How should test cases be down sampled? Options: none, random, maxmin"),
+  VALUE(LEX_DS_MODE, std::string, "random", "How should test cases be down sampled? Options: \nnone \nrandom \nmaxmin-full \nmaxmin-pop-sample"),
+  VALUE(LEX_DS_POP_RATE, double, 0.5, "Percent of population to use when computing maxmin test case sample"),
 
   GROUP(NONDOMINATED_SORTING, "Parameters for nondominated sorting algorithm."), // // 500 gens in 120 secs
   VALUE(NDS_MAX, double, 9000000000000000.0, "Large dummy number ."),

@@ -74,14 +74,14 @@ class DiagWorld : public emp::World<Org>
 
     // experiment configurations
     DiaConfig & config;
-    enum class Scheme {
-      TRUNCATION=0,
-      TOURNAMENT=1,
-      FITNESS_SHARING=2,
-      LEXICASE=3,
-      NONDOMINATED=4,
-      NOVELTY=5
-    };
+    // enum class Scheme {
+    //   TRUNCATION=0,
+    //   TOURNAMENT=1,
+    //   FITNESS_SHARING=2,
+    //   LEXICASE=3,
+    //   NONDOMINATED=4,
+    //   NOVELTY=5
+    // };
 
     // target vector
     target_t target;
@@ -212,6 +212,7 @@ class DiagWorld : public emp::World<Org>
     void NoveltySearch();
 
     void Lexicase();
+    void LexicaseEvenLead();
     // void DownSampledLexicase();
 
     // ---- evaluation function implementations ----
@@ -388,45 +389,29 @@ void DiagWorld::SetSelection()
 
   do_sample_traits = []() { /*do nothing by default*/; };
 
-  switch (config.SELECTION())
-  {
-    case static_cast<size_t>(Scheme::TRUNCATION):
-      Truncation();
-      break;
-
-    case static_cast<size_t>(Scheme::TOURNAMENT):
-      Tournament();
-      break;
-
-    case static_cast<size_t>(Scheme::FITNESS_SHARING):
-      FitnessSharing();
-      break;
-
-    case static_cast<size_t>(Scheme::LEXICASE): {
-      SetupTraitSampling();
-      if (config.LEX_EPS() == 0) {
-        Lexicase();
-      } else {
-        EpsilonLexicase();
-      }
-      break;
-    }
-
-    case static_cast<size_t>(Scheme::NONDOMINATED):
-      NonDominatedSorting();
-      break;
-
-    case static_cast<size_t>(Scheme::NOVELTY):
-      NoveltySearch();
-      break;
-
-    default:
-      std::cout << "ERROR UNKNOWN SELECTION CALL, " << config.SELECTION() << std::endl;
-      emp_assert(false);
-      break;
+  if (config.SELECTION() == "truncation") {
+    Truncation();
+  } else if (config.SELECTION() == "tournament") {
+    Tournament();
+  } else if (config.SELECTION() == "fitness-sharing") {
+    FitnessSharing();
+  } else if (config.SELECTION() == "lexicase") {
+    SetupTraitSampling();
+    Lexicase();
+  } else if (config.SELECTION() == "lexicase-eps") {
+    SetupTraitSampling();
+    EpsilonLexicase();
+  } else if (config.SELECTION() == "lexicase-even-lead") {
+    SetupTraitSampling();
+    LexicaseEvenLead();
+  } else if (config.SELECTION() == "nondominated-sorting") {
+    NonDominatedSorting();
+  } else if (config.SELECTION() == "novelty") {
+    NoveltySearch();
+  } else {
+    std::cout << "ERROR UNKNOWN SELECTION CALL, " << config.SELECTION() << std::endl;
+    emp_assert(false);
   }
-
-
 
   std::cout << "Finished setting the Selection function! \n" << std::endl;
 }
@@ -462,11 +447,17 @@ void DiagWorld::SetupTraitSampling() {
       }
     };
 
-  } else if (config.LEX_DS_MODE() == "maxmin") {
+  } else if (config.LEX_DS_MODE() == "maxmin-full") {
     // full info maxmin
-    std::cout << "  Sample type: maxmin" << std::endl;
+    std::cout << "  Sample type: maxmin-full" << std::endl;
     // TODO - check that this works as expected
     do_sample_traits = [this]() {
+      // std::cout << "--------SAMPLING---------" << std::endl;
+      // std::cout << "Test profiles: " << std::endl;
+      // for (size_t test_id = 0; test_id < config.OBJECTIVE_CNT(); ++test_id) {
+      //   std::cout << "["<<test_id<<"]: " << test_score_matrix[test_id] << std::endl;
+      // }
+
       // calculate the sample size
       const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
       emp_assert(sampled_trait_ids.size() <= possible_trait_ids.size(), "The number of sampled traits should be <= than the total number of traits");
@@ -482,10 +473,12 @@ void DiagWorld::SetupTraitSampling() {
       sampled_trait_ids.clear();
       sampled_trait_ids.emplace_back(available_ids.back());
       available_ids.pop_back();
+      // std::cout << "First sampled trait: " << sampled_trait_ids[0] << std::endl;
 
       emp::vector< emp::vector<double> > dist_cache(possible_trait_ids.size(), emp::vector<double>(possible_trait_ids.size(), -1));
 
       while (sampled_trait_ids.size() < sample_size) {
+        // std::cout << "Sampling test " << sampled_trait_ids.size() << std::endl;
         // Find available id with the maximum min distance to a chosen id
         double maxmin_dist = -1;
         size_t maxmin_id = 0;
@@ -494,11 +487,14 @@ void DiagWorld::SetupTraitSampling() {
         // For each possible test to be sampled, find its minimum distance to an already sampled test.
         for (size_t avail_idx = 0; avail_idx < available_ids.size(); ++avail_idx) {
           size_t cur_id = available_ids[avail_idx];
+          // std::cout << "  Analyzing test " << cur_id << std::endl;
           double cur_min_dist = 0; // find minimum distance between current availble id and all already sampled ids
           const auto& cur_test_profile = test_score_matrix[cur_id];
+          // std::cout << "    Test profile" << test_score_matrix[cur_id] << std::endl;
 
           for (size_t sampled_idx = 0; sampled_idx < sampled_trait_ids.size(); ++sampled_idx) {
             const size_t sampled_id = sampled_trait_ids[sampled_idx];
+            // std::cout << "    Comparing " << cur_id << " vs sampled " << sampled_id << std::endl;
             emp_assert(sampled_id != cur_id); // An available ID should never already be sampled.
             double dist=0.0;
             if (dist_cache[cur_id][sampled_id] != -1) {
@@ -509,26 +505,155 @@ void DiagWorld::SetupTraitSampling() {
               dist_cache[cur_id][sampled_id] = dist;
               dist_cache[sampled_id][cur_id] = dist;
             }
-            if (dist == 0) break; // Not going to get bigger than zero.
+            // std::cout << "      dist = " << dist << std::endl;
             if (sampled_idx == 0 || dist < cur_min_dist) {
               cur_min_dist = dist;
             }
+            if (dist == 0) break; // Not going to get bigger than zero.
           }
+
+          // std::cout << "    min dist for this test " << cur_min_dist << std::endl;
 
           if ( avail_idx==0 || cur_min_dist > maxmin_dist ) {
             maxmin_dist = cur_min_dist;
             maxmin_id = cur_id;
             maxmin_avail_idx = avail_idx;
           }
-
         }
 
+        // std::cout << "  found maxmin_dist ("<<maxmin_id<<") = " << maxmin_dist << std::endl;
         // move sampled id to back of available
         std::swap(available_ids[maxmin_avail_idx], available_ids[available_ids.size()-1]);
         emp_assert(available_ids.back() == maxmin_id);
         available_ids.pop_back();
         sampled_trait_ids.emplace_back(maxmin_id);
       }
+
+      /////////
+
+
+      // std::cout << "Cached distances: " << std::endl;
+      // for (size_t test_id = 0; test_id < config.OBJECTIVE_CNT(); ++test_id) {
+      //   std::cout << "["<<test_id<<"]: " << dist_cache[test_id] << std::endl;
+      // }
+
+      // std::cout << "Sampled test ids: " << sampled_trait_ids << std::endl;
+      /////////
+
+    };
+  } else if (config.LEX_DS_MODE() == "maxmin-pop-sample") {
+    // full info maxmin
+    std::cout << "  Sample type: maxmin-pop-sample" << std::endl;
+    // TODO - check that this works as expected
+    do_sample_traits = [this]() {
+      // std::cout << "--------SAMPLING---------" << std::endl;
+      // std::cout << "Test profiles: " << std::endl;
+      // for (size_t test_id = 0; test_id < config.OBJECTIVE_CNT(); ++test_id) {
+      //   std::cout << "["<<test_id<<"]: " << test_score_matrix[test_id] << std::endl;
+      // }
+
+      // calculate the sample size
+      const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      emp_assert(sampled_trait_ids.size() <= possible_trait_ids.size(), "The number of sampled traits should be <= than the total number of traits");
+
+      emp::vector<size_t> available_ids(possible_trait_ids.size(), 0);
+      std::copy(
+        possible_trait_ids.begin(),
+        possible_trait_ids.end(),
+        available_ids.begin()
+      );
+      emp::Shuffle(GetRandom(), available_ids);
+      std::unordered_set<size_t> included_ids;
+      sampled_trait_ids.clear();
+      sampled_trait_ids.emplace_back(available_ids.back());
+      available_ids.pop_back();
+      // std::cout << "First sampled trait: " << sampled_trait_ids[0] << std::endl;
+
+      // Only base sample calculation on a sample of possible parents
+      emp::vector<size_t> sampled_org_ids(GetSize(), 0);
+      std::iota(
+        sampled_org_ids.begin(),
+        sampled_org_ids.end(),
+        0
+      );
+      emp::Shuffle(GetRandom(), sampled_org_ids);
+      const size_t org_sample_size = (size_t)(config.LEX_DS_POP_RATE() * (double)GetSize());
+      sampled_org_ids.resize(org_sample_size);
+      // Build matrix of sampled test profiles
+      emp::vector< emp::vector<double> > sampled_test_profiles(possible_trait_ids.size(), emp::vector<double>(org_sample_size, -1));
+      for (size_t org_idx = 0; org_idx < sampled_org_ids.size(); ++org_idx) {
+        const size_t org_id = sampled_org_ids[org_idx];
+        auto& org_scores = GetOrg(org_id).GetScore();
+        for (size_t test_id = 0; test_id < org_scores.size(); ++test_id) {
+          sampled_test_profiles[test_id][org_idx] = test_score_matrix[test_id][org_id];
+        }
+      }
+      // Initialize a cache for distances between test profiles
+      emp::vector< emp::vector<double> > dist_cache(possible_trait_ids.size(), emp::vector<double>(possible_trait_ids.size(), -1));
+
+      while (sampled_trait_ids.size() < sample_size) {
+        // std::cout << "Sampling test " << sampled_trait_ids.size() << std::endl;
+        // Find available id with the maximum min distance to a chosen id
+        double maxmin_dist = -1;
+        size_t maxmin_id = 0;
+        size_t maxmin_avail_idx = 0;
+
+        // For each possible test to be sampled, find its minimum distance to an already sampled test.
+        for (size_t avail_idx = 0; avail_idx < available_ids.size(); ++avail_idx) {
+          size_t cur_id = available_ids[avail_idx];
+          // std::cout << "  Analyzing test " << cur_id << std::endl;
+          double cur_min_dist = 0; // find minimum distance between current availble id and all already sampled ids
+          const auto& cur_test_profile = sampled_test_profiles[cur_id];
+          // std::cout << "    Test profile" << test_score_matrix[cur_id] << std::endl;
+
+          for (size_t sampled_idx = 0; sampled_idx < sampled_trait_ids.size(); ++sampled_idx) {
+            const size_t sampled_id = sampled_trait_ids[sampled_idx];
+            // std::cout << "    Comparing " << cur_id << " vs sampled " << sampled_id << std::endl;
+            emp_assert(sampled_id != cur_id); // An available ID should never already be sampled.
+            double dist=0.0;
+            if (dist_cache[cur_id][sampled_id] != -1) {
+              dist = dist_cache[cur_id][sampled_id];
+            } else {
+              const auto& sampled_test_profile = sampled_test_profiles[sampled_id];
+              dist = PhenDist(sampled_test_profile, cur_test_profile);
+              dist_cache[cur_id][sampled_id] = dist;
+              dist_cache[sampled_id][cur_id] = dist;
+            }
+            // std::cout << "      dist = " << dist << std::endl;
+            if (sampled_idx == 0 || dist < cur_min_dist) {
+              cur_min_dist = dist;
+            }
+            if (dist == 0) break; // Not going to get bigger than zero.
+          }
+
+          // std::cout << "    min dist for this test " << cur_min_dist << std::endl;
+
+          if ( avail_idx==0 || cur_min_dist > maxmin_dist ) {
+            maxmin_dist = cur_min_dist;
+            maxmin_id = cur_id;
+            maxmin_avail_idx = avail_idx;
+          }
+        }
+
+        // std::cout << "  found maxmin_dist ("<<maxmin_id<<") = " << maxmin_dist << std::endl;
+        // move sampled id to back of available
+        std::swap(available_ids[maxmin_avail_idx], available_ids[available_ids.size()-1]);
+        emp_assert(available_ids.back() == maxmin_id);
+        available_ids.pop_back();
+        sampled_trait_ids.emplace_back(maxmin_id);
+      }
+
+      /////////
+
+
+      // std::cout << "Cached distances: " << std::endl;
+      // for (size_t test_id = 0; test_id < config.OBJECTIVE_CNT(); ++test_id) {
+      //   std::cout << "["<<test_id<<"]: " << dist_cache[test_id] << std::endl;
+      // }
+
+      // std::cout << "Sampled test ids: " << sampled_trait_ids << std::endl;
+      /////////
+
     };
 
   } else if (config.LEX_DS_MODE() == "none") {
@@ -826,7 +951,7 @@ void DiagWorld::SetDataTracking()
   // Pareto group count
   data_file->AddFun<size_t>([this]()
   {
-    if(config.SELECTION() == static_cast<size_t>(Scheme::NONDOMINATED))
+    if(config.SELECTION() == "nondominated-sorting")
     {
       emp_assert(pareto_cnt != 0);
       return pareto_cnt;
@@ -944,7 +1069,7 @@ void DiagWorld::PopulateWorld()
   // random starting organisms
   if(config.START())
   {
-    for(int i = 0; i < config.POP_SIZE(); ++i)
+    for(size_t i = 0; i < config.POP_SIZE(); ++i)
     {
       genome_t g = emp::RandomDoubleVector(*random_ptr, config.OBJECTIVE_CNT(), config.LOWER_BND(), config.UPPER_BND());
       Inject(g,1);
@@ -1180,6 +1305,28 @@ void DiagWorld::Lexicase() {
 
     do_sample_traits();
     return selection->Lexicase(
+      matrix,
+      pop.size(),
+      sampled_trait_ids
+    );
+
+  };
+
+}
+
+void DiagWorld::LexicaseEvenLead() {
+  std::cout << "Setting selection scheme: LexicaseEvenLead" << std::endl;
+
+  // note - these select functions could also be made faster by not returning a copy of the selected parents
+  select = [this]() {
+    emp_assert(selection);
+    emp_assert(pop.size() == config.POP_SIZE());
+    emp_assert(0 < pop.size());
+
+    fmatrix_t matrix = PopFitMat(); // NOTE - this could be made faster
+
+    do_sample_traits();
+    return selection->LexicaseEvenLead(
       matrix,
       pop.size(),
       sampled_trait_ids
@@ -1465,7 +1612,7 @@ size_t DiagWorld::UniqueObjective()
   optimal_t unique;
 
   // novelty search unqiue objective trait count
-  if(config.SELECTION() == static_cast<size_t>(Scheme::NOVELTY))
+  if(config.SELECTION() == "novelty")
   {
     emp_assert(arc_opti_trt.size() == config.OBJECTIVE_CNT());
     unique = arc_opti_trt;
@@ -1542,7 +1689,7 @@ size_t DiagWorld::ActivationGeneOverlap()
   size_t count = 0;
 
   // if novelty selection is running calculate overlap
-  if(config.SELECTION() == static_cast<size_t>(Scheme::NOVELTY))
+  if(config.SELECTION() == "novelty")
   {
     emp_assert(arc_acti_gene.size() == config.OBJECTIVE_CNT());
     for(size_t i = 0; i < config.OBJECTIVE_CNT(); ++i)
@@ -1651,7 +1798,7 @@ void DiagWorld::ArchiveDataUpdate(const size_t org_id)
   // quick checks
   emp_assert(pop.size() == config.POP_SIZE());
   emp_assert(0 <= org_id); emp_assert(org_id < pop.size());
-  emp_assert(config.SELECTION() == static_cast<size_t>(Scheme::NOVELTY));
+  emp_assert(config.SELECTION() == "novelty");
 
   // get org from
   Org & org = *pop[org_id];

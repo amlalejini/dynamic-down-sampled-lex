@@ -401,6 +401,12 @@ class Selection
       const emp::vector<size_t>& trait_ids=emp::vector<size_t>()
     );
 
+    emp::vector<size_t>& LexicaseEvenLead(
+      const fmatrix_t& mscore,
+      size_t n=1,
+      const emp::vector<size_t>& trait_ids=emp::vector<size_t>()
+    );
+
     emp::vector<size_t>& EpsilonLexicase(
       const fmatrix_t& mscore,
       double epsilon,
@@ -441,7 +447,7 @@ Selection::neigh_t Selection::FitNearestN(const score_t & score, const size_t K)
     while(neigh.size() != K)
     {
       //quick checks
-      emp_assert(!(left < 0 && order.size() <= right));
+      emp_assert(!( (left < 0) && ((int)order.size() <= right) ));
 
       // reached all left neighbors possible for i
       if(left < 0)
@@ -450,7 +456,7 @@ Selection::neigh_t Selection::FitNearestN(const score_t & score, const size_t K)
         ++right;
       }
       // reached all right neighbors possible for i
-      else if (order.size() <= right)
+      else if ( ((int)order.size()) <= right)
       {
         neigh.push_back(order[left].second);
         --left;
@@ -991,6 +997,102 @@ size_t Selection::EpsiLexicase(const fmatrix_t & mscore, const double epsi, cons
   size_t wid = emp::Choose(random, filter.size(), 1)[0];
 
   return filter[wid];
+}
+
+emp::vector<size_t>& Selection::LexicaseEvenLead(
+  const fmatrix_t& mscore,
+  size_t n/*=1*/,
+  const emp::vector<size_t>& trait_ids/*=emp::vector<size_t>()*/
+) {
+  emp_assert(n > 0);
+  const size_t num_candidates = mscore.size();
+  emp_assert(num_candidates > 0);
+  const size_t total_traits = mscore[0].size();
+  emp_assert(trait_ids.size() <= total_traits);
+
+  lex_selected.resize(n, 0);
+
+  // What traits do we use to do selection?
+  if (trait_ids.size() == 0) {
+    // use all traits
+    lex_fun_ordering.resize(total_traits);
+    std::iota(
+      lex_fun_ordering.begin(),
+      lex_fun_ordering.end(),
+      0
+    );
+  } else {
+    // use given trait ids
+    lex_fun_ordering.resize(trait_ids.size());
+    for (size_t fun_i = 0; fun_i < lex_fun_ordering.size(); ++fun_i) {
+      lex_fun_ordering[fun_i] = trait_ids[fun_i];
+    }
+  }
+
+  emp::vector<size_t> leads(n, 0);
+  emp::Shuffle(random, lex_fun_ordering);
+  for(size_t i = 0; i < leads.size(); ++i) {
+    leads[i] = lex_fun_ordering[i%lex_fun_ordering.size()];
+  }
+
+  // Initialize the pool of all candidates for selection
+  emp::vector<size_t> all_candidates(num_candidates);
+  std::iota(
+    all_candidates.begin(),
+    all_candidates.end(),
+    0
+  );
+
+  // Declare pools for use during selection filtering
+  emp::vector<size_t> cur_pool, next_pool;
+  for (size_t sel_i = 0; sel_i < n; ++sel_i) {
+    // Randomize the lexicase fitness function ordering
+    emp::Shuffle(random, lex_fun_ordering);
+    emp_assert(sel_i < leads.size());
+    const size_t lead_test_id = leads[sel_i];
+    // Step through each 'test case'
+    cur_pool = all_candidates;
+    int depth = -1;
+    // For each test case, filter the population down to only the best performers.
+    // for (size_t fun_id : lex_fun_ordering) {
+    // std::cout << " Selection " << sel_i << " order:";
+    for (size_t fun_order_idx = 0; fun_order_idx <= lex_fun_ordering.size(); ++fun_order_idx) {
+      size_t fun_id = lead_test_id;
+      if (fun_order_idx != 0) {
+        fun_id = lex_fun_ordering[fun_order_idx - 1];
+        if (fun_id == lead_test_id) continue;
+      }
+      // std::cout << " " << fun_id << " ";
+      // const size_t fun_id = (fun_order_idx == 0) ? lead_test_id : lex_fun_ordering[fun_order_idx - 1];
+
+      emp_assert(fun_id < total_traits);
+      ++depth;
+      double max_score =  mscore[cur_pool[0]][fun_id];     // Max score starts as the first candidate's score on this function.
+      next_pool.push_back(cur_pool[0]);                    // Seed the keeper pool with the first candidate.
+
+      for (size_t i = 1; i < cur_pool.size(); ++i) {
+        const size_t cand_id = cur_pool[i];
+        const double cur_score = mscore[cand_id][fun_id];
+        if (cur_score > max_score) {
+          max_score = cur_score;              // This is the new max score for this function
+          next_pool.resize(1);                // Clear out candidates with the former max score for this function.
+          next_pool[0] = cand_id;             // Add this candidate as the only one with the new max score.
+        } else if (cur_score == max_score) {
+          next_pool.emplace_back(cand_id);    // Same as current max score. Save this candidate too.
+        }
+      }
+      // Make next_pool into new cur_pool; make cur_pool allocated space for next_pool
+      std::swap(cur_pool, next_pool);
+      next_pool.resize(0);
+      if (cur_pool.size() == 1) break; // Step if we're down to just one candidate.
+    }
+    // std::cout << std::endl;
+    // Select a random survivor (all equal at this point)
+    emp_assert(cur_pool.size() > 0);
+    const size_t win_id = cur_pool[random.GetUInt(cur_pool.size())];
+    lex_selected[sel_i] = win_id;
+  }
+  return lex_selected;
 }
 
 emp::vector<size_t>& Selection::Lexicase(
