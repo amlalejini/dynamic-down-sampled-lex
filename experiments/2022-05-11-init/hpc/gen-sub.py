@@ -17,7 +17,7 @@ default_job_mem_request = "4G"
 default_total_updates = 300000
 
 job_name = "05-11"
-executable = "ds-lex"
+executable = "diagnostics-suite"
 
 base_script_filename = "./base_script.txt"
 
