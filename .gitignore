@@ -40,6 +40,7 @@ output/
 # Root directory scratch files
 time-exec.sh
 local/
+log.txt
 
 # Editor cfg files
 .vscode
