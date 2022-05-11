@@ -153,6 +153,7 @@ class DiagWorld : public emp::World<Org>
     emp::vector<size_t> sampled_trait_ids;
     emp::vector<size_t> possible_trait_ids;
     std::function<void()> do_sample_traits;
+    std::function<double()> calc_evals;
     emp::vector< emp::vector<double> > test_score_matrix; // [test_id][org_id]
 
     void SetupTraitSampling();
@@ -387,6 +388,9 @@ void DiagWorld::SetSelection()
   std::cout << "Created selection" << std::endl;
 
   do_sample_traits = []() { /*do nothing by default*/; };
+  calc_evals = [this]() {
+    return config.POP_SIZE() * config.OBJECTIVE_CNT() * (GetUpdate()+1); // Include current generation in evaluations
+  };
 
   if (config.SELECTION() == "truncation") {
     SetupSelection_Truncation();
@@ -444,6 +448,11 @@ void DiagWorld::SetupTraitSampling() {
       for (size_t i = 0; i < sampled_trait_ids.size(); ++i) {
         sampled_trait_ids[i] = possible_trait_ids[i];
       }
+    };
+
+    calc_evals = [this]() {
+      const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      return (GetUpdate()+1)*config.POP_SIZE()*sample_size;
     };
 
   } else if (config.LEX_DS_MODE() == "maxmin-full") {
@@ -539,6 +548,11 @@ void DiagWorld::SetupTraitSampling() {
       // std::cout << "Sampled test ids: " << sampled_trait_ids << std::endl;
       /////////
 
+    };
+    // MinMax-full cheats on evaluation reporting (just reports same as random, but actually would use full lexicase)
+    calc_evals = [this]() {
+      const size_t sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      return (GetUpdate()+1)*config.POP_SIZE()*sample_size;
     };
   } else if (config.LEX_DS_MODE() == "maxmin-pop-sample") {
     // full info maxmin
@@ -655,6 +669,13 @@ void DiagWorld::SetupTraitSampling() {
 
     };
 
+    calc_evals = [this]() {
+      const size_t test_sample_size = (size_t)(config.LEX_DS_RATE() * (double)config.OBJECTIVE_CNT());
+      const size_t pop_sample_size = (size_t)((double)config.POP_SIZE()*config.LEX_DS_POP_RATE());
+      const double evals_per_gen = (pop_sample_size * config.OBJECTIVE_CNT()) + ((config.POP_SIZE()-pop_sample_size)*test_sample_size);
+      return (GetUpdate()+1)*evals_per_gen;
+    };
+
   } else if (config.LEX_DS_MODE() == "none") {
     std::cout << "  Sample type: none" << std::endl;
     do_sample_traits = []() { /*do nothing by default*/; };
@@ -761,6 +782,23 @@ void DiagWorld::SetDataTracking()
   pop_str.New();
   std::cout << "Nodes initialized!" << std::endl;
 
+  // update we are at
+  data_file->AddFun<size_t>(
+    [this]() {
+      return update;
+    },
+    "gen",
+    "Current generation at!"
+  );
+
+  data_file->AddFun<size_t>(
+    [this]() {
+      return calc_evals();
+    },
+    "evals",
+    "Current number of evaluations used"
+  );
+
   // track population aggregate score stats: average, variance, min, max
   data_file->AddMean(*pop_fit, "pop_fit_avg", "Population average aggregate performance.");
   data_file->AddVariance(*pop_fit, "pop_fit_var", "Population variance aggregate performance.");
@@ -790,17 +828,6 @@ void DiagWorld::SetDataTracking()
   data_file->AddVariance(*pop_str, "pop_str_var", "Population variance streak count.");
   data_file->AddMax(*pop_str, "pop_str_max", "Population maximum streak count.");
   data_file->AddMin(*pop_str, "pop_str_min", "Population minimum streak count.");
-
-  std::cout << "Added all data nodes to data file!" << std::endl;
-
-  // update we are at
-  data_file->AddFun<size_t>(
-    [this]() {
-      return update;
-    },
-    "gen",
-    "Current generation at!"
-  );
 
   // unique optimized objectives count
   data_file->AddFun<size_t>([this]()
