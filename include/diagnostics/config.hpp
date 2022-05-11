@@ -25,9 +25,9 @@ EMP_BUILD_CONFIG(DiaConfig,
                               //  "2: Strong Ecology \n3: Exploration \n4: Weak Ecology"),
 
   GROUP(MUTATIONS, "Mutation rates for organisms."),
-  VALUE(MUTATE_PER, double, 0.007, "Probability of instructions being mutated"),
-  VALUE(MEAN, double, 0.0, "Mean of Gaussian Distribution for mutations"),
-  VALUE(STD, double, 1.0, "Standard Deviation of Gaussian Distribution for mutations"),
+  VALUE(MUTATE_PER_SITE_RATE, double, 0.007, "Probability of instructions being mutated"),
+  VALUE(MUTATE_MEAN, double, 0.0, "Mean of Gaussian Distribution for mutations"),
+  VALUE(MUTATE_STD, double, 1.0, "Standard Deviation of Gaussian Distribution for mutations"),
 
   GROUP(TRUNCATION, "Parameters for truncation."), // finished in under 60 secs
   VALUE(TRUNC_SIZE, size_t, 8, "Parameter estimate for truncation size t."),

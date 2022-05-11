@@ -350,8 +350,8 @@ void DiagWorld::SetMutation()
 
       for (size_t i = 0; i < genome.size(); ++i) {
         // if we do a mutation at this objective
-        if (random_ptr->P(config.MUTATE_PER())) {
-          const double mut = random_ptr->GetRandNormal(config.MEAN(), config.STD());
+        if (random_ptr->P(config.MUTATE_PER_SITE_RATE())) {
+          const double mut = random_ptr->GetRandNormal(config.MUTATE_MEAN(), config.MUTATE_STD());
 
           // mutation puts objective above target
           if (config.TARGET() < genome[i] + mut) {
