@@ -1,0 +1,203 @@
+# 2022-05-11 - Initial Experiment
+
+## Setup
+
+```{r}
+experiment_slug <- "2022-05-11-init"
+working_directory <- paste0("experiments/",experiment_slug,"/analysis/")
+```
+
+### Analysis dependencies
+
+Load all required R libraries
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(cowplot)
+library(RColorBrewer)
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+```
+
+These analyses were knit with the following environment:
+
+```{r}
+print(version)
+```
+
+### Load data
+
+Load summary data.
+
+```{r}
+# summary_data_loc <- paste0(working_directory, "data/aggregate.csv")
+summary_data_loc <- paste0(working_directory, "test/dump/aggregate.csv")
+summary_data <- read.csv(summary_data_loc, na.strings="NONE")
+
+summary_data$DIAGNOSTIC <- as.factor(
+  summary_data$DIAGNOSTIC
+)
+summary_data$LEX_DS_MODE <- as.factor(
+  summary_data$LEX_DS_MODE
+)
+summary_data$LEX_DS_RATE <- as.factor(
+  summary_data$LEX_DS_RATE
+)
+summary_data$SEED <- as.factor(
+  summary_data$SEED
+)
+summary_data$SELECTION <- as.factor(
+  summary_data$SELECTION
+)
+summary_data$condition_name <- as.factor(
+  summary_data$condition_name
+)
+```
+
+Load time series data.
+
+```{r}
+# time_series_data_loc <- paste0(working_directory, "data/time_series.csv")
+time_series_data_loc <- paste0(working_directory, "test/dump/time_series.csv")
+time_series_data <- read.csv(time_series_data_loc, na.strings="NONE")
+
+time_series_data$DIAGNOSTIC <- as.factor(
+  time_series_data$DIAGNOSTIC
+)
+time_series_data$LEX_DS_MODE <- as.factor(
+  time_series_data$LEX_DS_MODE
+)
+time_series_data$LEX_DS_RATE <- as.factor(
+  time_series_data$LEX_DS_RATE
+)
+time_series_data$SEED <- as.factor(
+  time_series_data$SEED
+)
+time_series_data$SELECTION <- as.factor(
+  time_series_data$SELECTION
+)
+time_series_data$condition_name <- as.factor(
+  time_series_data$condition_name
+)
+```
+
+
+Miscellaneous setup.
+
+```{r}
+# Configure our default graphing theme
+theme_set(theme_cowplot())
+# Palette
+cb_palette <- "Set2"
+alpha <- 0.05
+# Create a directory to store plots
+plot_directory <- paste0(working_directory, "plots/")
+dir.create(plot_directory, showWarnings=FALSE)
+```
+
+## Best aggregate performance
+
+```{r}
+ggplot(
+    summary_data,
+    aes(
+      x=condition_name,
+      y=ele_agg_per,
+      fill=condition_name
+    )
+  ) +
+  geom_flat_violin(
+    position = position_nudge(x = .2, y = 0),
+    alpha = .8,
+    adjust=1.5
+  ) +
+  geom_point(
+    mapping=aes(color=condition_name),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  # scale_y_continuous(
+  #   trans=log10_trans()
+  # ) +
+  facet_wrap(
+    ~DIAGNOSTIC,
+    ncol=1
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 90),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(working_directory, "plots/", "ele_agg_per.pdf")
+)
+```
+
+## Population-wide unique optimized objectives
+
+```{r}
+ggplot(
+    summary_data,
+    aes(
+      x=condition_name,
+      y=pop_uni_obj,
+      fill=condition_name
+    )
+  ) +
+  geom_flat_violin(
+    position = position_nudge(x = .2, y = 0),
+    alpha = .8,
+    adjust=1.5
+  ) +
+  geom_point(
+    mapping=aes(color=condition_name),
+    position = position_jitter(width = .15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  # scale_y_continuous(
+  #   trans=log10_trans()
+  # ) +
+  facet_wrap(
+    ~DIAGNOSTIC,
+    ncol=1
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 90),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(working_directory, "plots/", "pop_uni_obj.pdf")
+)
+```
+
+## Best aggregate performance over time
+
+## Population optimized objective coverage over time
