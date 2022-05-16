@@ -137,9 +137,11 @@ def main():
         )
         ts_generations_included = [int(line["gen"]) for line in filtered_ts_data]
         ts_generations_included.sort()
+        gen_to_ts_step = {ts_generations_included[i]:i for i in range(0, len(ts_generations_included))}
+
         for line in filtered_ts_data:
             gen = int(line["gen"])
-            time_series_info[gen] = {}
+            time_series_info[gen] = {"ts_step":gen_to_ts_step[gen]}
             for field in time_series_data_fields:
                 time_series_info[gen][field] = line[field]
             for field in time_series_cfg_fields:
