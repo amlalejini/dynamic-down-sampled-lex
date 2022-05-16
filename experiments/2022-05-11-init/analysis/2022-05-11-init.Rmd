@@ -31,8 +31,8 @@ print(version)
 Load summary data.
 
 ```{r}
-# summary_data_loc <- paste0(working_directory, "data/aggregate.csv")
-summary_data_loc <- paste0(working_directory, "test/dump/aggregate.csv")
+summary_data_loc <- paste0(working_directory, "data/aggregate.csv")
+# summary_data_loc <- paste0(working_directory, "test/dump/aggregate.csv")
 summary_data <- read.csv(summary_data_loc, na.strings="NONE")
 
 summary_data$DIAGNOSTIC <- as.factor(
@@ -58,8 +58,8 @@ summary_data$condition_name <- as.factor(
 Load time series data.
 
 ```{r}
-# time_series_data_loc <- paste0(working_directory, "data/time_series.csv")
-time_series_data_loc <- paste0(working_directory, "test/dump/time_series.csv")
+time_series_data_loc <- paste0(working_directory, "data/time_series.csv")
+# time_series_data_loc <- paste0(working_directory, "test/dump/time_series.csv")
 time_series_data <- read.csv(time_series_data_loc, na.strings="NONE")
 
 time_series_data$DIAGNOSTIC <- as.factor(
@@ -100,7 +100,7 @@ dir.create(plot_directory, showWarnings=FALSE)
 
 ```{r}
 ggplot(
-    summary_data,
+    filter(summary_data, DIAGNOSTIC=="exploration"),
     aes(
       x=condition_name,
       y=ele_agg_per,
@@ -151,7 +151,7 @@ ggsave(
 
 ```{r}
 ggplot(
-    summary_data,
+    filter(summary_data, DIAGNOSTIC=="weak-ecology"),
     aes(
       x=condition_name,
       y=pop_uni_obj,
@@ -200,4 +200,196 @@ ggsave(
 
 ## Best aggregate performance over time
 
+### Exploitation
+
+```{r}
+ggplot(
+    # time_series_data,
+    filter(
+      time_series_data,
+      (ts_step%%1000)==0 & DIAGNOSTIC=="exploitation"
+    ),
+    aes(
+      x=ts_step,
+      y=ele_agg_per,
+      fill=condition_name,
+      color=condition_name
+    )
+  ) +
+  stat_summary(geom="line", fun=mean) +
+  # stat_summary(
+  #   geom="ribbon",
+  #   fun.data="mean_cl_boot",
+  #   fun.args=list(conf.int=0.95),
+  #   alpha=0.2,
+  #   linetype=0
+  # ) +
+  stat_summary(
+    geom="ribbon",
+    fun.min=min,
+    fun.max=max,
+    alpha=0.2,
+    linetype=0
+  ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  theme(
+    legend.position="bottom"
+  )
+
+ggsave(
+  paste0(working_directory, "plots/", "exploitation_ele_agg_per_ot.pdf"),
+  width=15,
+  height=10
+)
+```
+
+### Structured Exploitation
+
+```{r}
+ggplot(
+    # time_series_data,
+    filter(
+      time_series_data,
+      (ts_step%%1000)==0 & DIAGNOSTIC=="struct-exploitation"
+    ),
+    aes(
+      x=ts_step,
+      y=ele_agg_per,
+      fill=condition_name,
+      color=condition_name
+    )
+  ) +
+  stat_summary(geom="line", fun=mean) +
+  # stat_summary(
+  #   geom="ribbon",
+  #   fun.data="mean_cl_boot",
+  #   fun.args=list(conf.int=0.95),
+  #   alpha=0.2,
+  #   linetype=0
+  # ) +
+  stat_summary(
+    geom="ribbon",
+    fun.min=min,
+    fun.max=max,
+    alpha=0.2,
+    linetype=0
+  ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  theme(
+    legend.position="bottom"
+  )
+
+ggsave(
+  paste0(working_directory, "plots/", "struct-exploitation_ele_agg_per_ot.pdf"),
+  width=15,
+  height=10
+)
+```
+
+### Exploration
+
+```{r}
+ggplot(
+    # time_series_data,
+    filter(
+      time_series_data,
+      (ts_step%%1000)==0 & DIAGNOSTIC=="exploration"
+    ),
+    aes(
+      x=ts_step,
+      y=ele_agg_per,
+      fill=condition_name,
+      color=condition_name
+    )
+  ) +
+  stat_summary(geom="line", fun=mean) +
+  # stat_summary(
+  #   geom="ribbon",
+  #   fun.data="mean_cl_boot",
+  #   fun.args=list(conf.int=0.95),
+  #   alpha=0.2,
+  #   linetype=0
+  # ) +
+  # stat_summary(
+  #   geom="ribbon",
+  #   fun.min=min,
+  #   fun.max=max,
+  #   alpha=0.2,
+  #   linetype=0
+  # ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  theme(
+    legend.position="bottom"
+  )
+
+ggsave(
+  paste0(working_directory, "plots/", "exploration_ele_agg_per_ot.pdf"),
+  width=15,
+  height=10
+)
+```
+
 ## Population optimized objective coverage over time
+
+### Weak ecology
+
+```{r}
+ggplot(
+    # time_series_data,
+    filter(
+      time_series_data,
+      (ts_step%%1000)==0 & DIAGNOSTIC=="weak-ecology"
+    ),
+    aes(
+      x=ts_step,
+      y=pop_uni_obj,
+      fill=condition_name,
+      color=condition_name
+    )
+  ) +
+  stat_summary(geom="line", fun=mean) +
+  # stat_summary(
+  #   geom="ribbon",
+  #   fun.data="mean_cl_boot",
+  #   fun.args=list(conf.int=0.95),
+  #   alpha=0.2,
+  #   linetype=0
+  # ) +
+  stat_summary(
+    geom="ribbon",
+    fun.min=min,
+    fun.max=max,
+    alpha=0.2,
+    linetype=0
+  ) +
+  scale_fill_brewer(
+    palette=cb_palette
+  ) +
+  scale_color_brewer(
+    palette=cb_palette
+  ) +
+  theme(
+    legend.position="bottom"
+  )
+
+ggsave(
+  paste0(working_directory, "plots/", "weak-ecology_pop_uni_obj.pdf"),
+  width=15,
+  height=10
+)
+```
