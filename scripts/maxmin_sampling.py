@@ -62,16 +62,23 @@ def maxmin_full_info_sample(
     return included_tests
 
 
+# pop_profile = [
+#     [1, 1, 0, 0, 0, 0],
+#     [1, 1, 1, 0, 0, 0],
+#     [1, 0, 0, 0, 1, 0],
+#     [1, 0, 0, 0, 0, 1],
+# ]
+
 pop_profile = [
-    [1, 1, 0, 0, 0, 0],
-    [1, 1, 1, 0, 0, 0],
-    [1, 0, 0, 0, 1, 0],
-    [1, 0, 0, 0, 0, 1],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 0, 1]
 ]
 
 result = maxmin_full_info_sample(
     pop_performances=pop_profile,
-    sample_size=3
+    sample_size=2,
+    init_test_id=0
 )
 
 print(result)
