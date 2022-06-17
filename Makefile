@@ -1,9 +1,12 @@
 # Project-specific settings
-PROJECT := diagnostics-suite
 EMP_DIR := third-party/Empirical/include
 CEREAL_DIR := third-party/Empirical/third-party/cereal/include
 
-MAIN_CPP ?= source/diagnostics.cpp
+# PROJECT := diagnostics-suite
+# MAIN_CPP ?= source/diagnostics.cpp
+
+PROJECT := selection_analyzer
+MAIN_CPP ?= source/selection_analyzer.cpp
 
 # Flags to use regardless of compiler
 CFLAGS_all := -Wall -Wno-unused-function -std=c++17 -lstdc++fs -I$(EMP_DIR)/ -Iinclude/

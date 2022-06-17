@@ -27,6 +27,7 @@ package-lock.json
 node_modules/
 coverage_include/
 
+selection_analyzer
 diagnostics-suite
 debug_file
 *.cfg
