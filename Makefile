@@ -9,7 +9,7 @@ PROJECT := selection_analyzer
 MAIN_CPP ?= source/selection_analyzer.cpp
 
 # Flags to use regardless of compiler
-CFLAGS_all := -Wall -Wno-unused-function -std=c++17 -lstdc++fs -I$(EMP_DIR)/ -Iinclude/
+CFLAGS_all := -Wall -Wno-unused-function -std=c++17 -lstdc++fs -I$(EMP_DIR)/ -Iinclude/ -Ithird-party/
 
 # Native compiler information
 CXX_nat := g++

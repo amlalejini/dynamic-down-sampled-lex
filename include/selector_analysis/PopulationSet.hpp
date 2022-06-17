@@ -13,7 +13,7 @@
 #include "emp/tools/string_utils.hpp"
 
 // Local includes
-#include "../../../csv-parser/parser.hpp"
+#include "csv-parser/parser.hpp"
 
 namespace selector_analysis {
 
