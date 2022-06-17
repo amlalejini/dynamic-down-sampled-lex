@@ -9,6 +9,7 @@
 // Local includes
 #include "selection/SelectionSchemes.hpp"
 #include "selector_analysis/config.hpp"
+#include "selector_analysis/PopulationSet.hpp"
 
 namespace selector_analysis {
 
@@ -26,7 +27,12 @@ protected:
   emp::Ptr<selection::BaseSelect> selector=nullptr;
   std::function<emp::vector<size_t>&(void)> do_selection_fun;
 
+  PopulationSet pop_set;
+
   void Setup();
+
+  void SetupPopulations();
+
 
 public:
 
@@ -39,10 +45,23 @@ public:
     Setup();
   }
 
+  void Run();
+
 };
 
 void SelectorAnalyzer::Setup() {
-  // TODO
+  std::cout << "Setting up SelectorAnalyzer" << std::endl;
+  // Configure populations
+  SetupPopulations();
+  // Configure selection(?)
+
+  // TODO - finish setup
+  std::cout << "Done setting up SelectorAnalyzer" << std::endl;
+}
+
+void SelectorAnalyzer::SetupPopulations() {
+  // Load populations from file
+  pop_set.LoadFromCSV(config.POPULATIONS_FILE());
 }
 
 } // namespace selector_analysis

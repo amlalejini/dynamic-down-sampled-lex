@@ -9,6 +9,7 @@
 
 #include "selector_analysis/config.hpp"
 #include "selector_analysis/PopulationSet.hpp"
+#include "selector_analysis/SelectorAnalyzer.hpp"
 // #include "diagnostics/world.hpp"
 // #include "diagnostics/org.hpp"
 
@@ -28,7 +29,9 @@ int main(int argc, char* argv[])
             << std::endl;
 
   // todo run analysis
-  selector_analysis::PopulationSet pop_set;
-  pop_set.LoadFromCSV("pop.csv");
-  std::cout << "Pop set size: " << pop_set.GetSize() << std::endl;
+  selector_analysis::SelectorAnalyzer analyzer(config);
+
+  // selector_analysis::PopulationSet pop_set;
+  // pop_set.LoadFromCSV("pop.csv");
+  // std::cout << "Pop set size: " << pop_set.GetSize() << std::endl;
 }
