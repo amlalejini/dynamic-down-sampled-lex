@@ -88,6 +88,22 @@ public:
   /// TODO
   void LoadFromCSV(const std::string& path);
 
+  emp::vector<Population>& GetPops() { return pops; }
+  const emp::vector<Population>& GetPops() const { return pops; }
+
+  Population& GetPop(size_t idx) {
+    emp_assert(idx < pops.size());
+    return pops[idx];
+  }
+  const Population& GetPop(size_t idx) const {
+    return GetPop(idx);
+  }
+
+  Population& operator[](size_t idx) {
+    emp_assert(idx < pops.size());
+    return pops[idx];
+  }
+
 };
 
 void PopulationSet::LoadFromCSV(const std::string& path) {
