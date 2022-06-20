@@ -11,6 +11,7 @@
 #include "emp/base/vector.hpp"
 #include "emp/datastructs/set_utils.hpp"
 #include "emp/tools/string_utils.hpp"
+#include "emp/math/stats.hpp"
 
 // Local includes
 #include "csv-parser/parser.hpp"
@@ -20,11 +21,28 @@ namespace selector_analysis {
 class Population {
 public:
   using pop_info_t = std::unordered_map<std::string, std::string>;
+
+  struct Organism {
+    emp::vector<double> test_case_scores;
+    double agg_score;
+
+    Organism(
+      const emp::vector<double>& in_test_case_scores=emp::vector<double>(),
+      double in_agg_score=0.0
+    ) :
+      test_case_scores(in_test_case_scores),
+      agg_score(in_agg_score)
+    { }
+
+  };
+
 protected:
 
   std::string name;
   pop_info_t info; ///< Info about how this population was generated
-  emp::vector< emp::vector<double> > pop_test_case_scores;
+  // emp::vector< emp::vector<double> > pop_test_case_scores;
+  // emp::vector< double > pop_agg_scores;
+  emp::vector< Organism > orgs;
   size_t num_test_cases;
 
 public:
@@ -37,22 +55,38 @@ public:
     info(pop_info)
   { }
 
-  size_t GetSize() const { return pop_test_case_scores.size(); }
+  // size_t GetSize() const { return pop_test_case_scores.size(); }
+  size_t GetSize() const { return orgs.size(); }
+
+  Organism& GetOrg(size_t org_id) {
+    emp_assert(org_id < orgs.size());
+    return orgs[org_id];
+  }
+  const Organism& GetOrg(size_t org_id) const {
+    emp_assert(org_id < orgs.size());
+    return orgs[org_id];
+  }
 
   void SetNumTestCases(size_t n)  { num_test_cases = n; }
   size_t GetNumTestCases() const { return num_test_cases; }
 
   void UpdatePopSize(size_t n) {
-    pop_test_case_scores.resize(n, emp::vector<double>(num_test_cases, 0.0));
+    // pop_test_case_scores.resize(n, emp::vector<double>(num_test_cases, 0.0));
+    orgs.resize(n, Organism(emp::vector<double>(num_test_cases, 0.0), 0.0));
   }
 
   const pop_info_t& GetPopInfo() const { return info; }
 
   void SetScores(size_t cand_id, const emp::vector<double>& test_scores) {
-    if (cand_id >= pop_test_case_scores.size()) {
-      pop_test_case_scores.resize(cand_id + 1);
+    // if (cand_id >= pop_test_case_scores.size()) {
+    //   pop_test_case_scores.resize(cand_id + 1);
+    // }
+    // pop_test_case_scores[cand_id] = test_scores;
+    if (cand_id >= orgs.size()) {
+      orgs.resize(cand_id+1);
     }
-    pop_test_case_scores[cand_id] = test_scores;
+    orgs[cand_id].test_case_scores = test_scores;
+    orgs[cand_id].agg_score = emp::Sum(test_scores); // NOTE - could make this function configurable
   }
 };
 
