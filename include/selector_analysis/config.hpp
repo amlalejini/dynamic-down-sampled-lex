@@ -20,6 +20,7 @@ namespace selector_analysis {
     GROUP(TEST_SAMPLING, "Sampling settings"),
     VALUE(TEST_SAMPLING_METHOD, std::string, "none", "Method of sampling test cases to use."),
     VALUE(TEST_SAMPLING_PROP, double, 0.1, "Proportion of tests to sample for selection." ),
+    VALUE(MAXMIN_POP_PROP, double, 0.1, "Proportion of population to use when doing maxmin sampling."),
 
     GROUP(PARTITIONING, "Partitioning settings"),
     VALUE(PARTITIONING_METHOD, std::string, "none", "Method of partitioning population and/or test cases"),

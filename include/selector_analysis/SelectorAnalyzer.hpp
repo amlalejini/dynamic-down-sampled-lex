@@ -17,6 +17,7 @@
 #include "selection/SelectionSchemes.hpp"
 #include "selector_analysis/config.hpp"
 #include "selector_analysis/PopulationSet.hpp"
+#include "selector_analysis/utilities.hpp"
 
 namespace selector_analysis {
 
@@ -35,9 +36,8 @@ const std::unordered_set<std::string> valid_selection_methods = {
 
 const std::unordered_set<std::string> valid_test_case_sampling_methods = {
   "none",
-  "random-sample"
-  // "cohorts",
-  // "maxmin-sample",
+  "random-sample",
+  "maxmin-sample"
   // "maxmin-fullinfo-sample"
   // ....
 };
@@ -123,8 +123,9 @@ protected:
     double phenotype_entropy;
     double phenotype_richness;
 
-    // todo - max test coverage?
-    // todo - calc pareto front size?
+    // TODO - single-test specialist count
+    // TODO - max test coverage?
+    // TODO - calc pareto front size?
 
     void Reset() {
       tests_covered.clear();
@@ -192,6 +193,7 @@ protected:
   void SetupTestSampling();
   void SetupTestSamplingNone();
   void SetupTestSamplingRandom();
+  void SetupTestSamplingMaxMin();
 
   void SetupPartitioning();
   void SetupPartitioningNone();
@@ -449,6 +451,8 @@ void SelectorAnalyzer::SetupTestSampling() {
     SetupTestSamplingNone();
   } else if (config.TEST_SAMPLING_METHOD() == "random-sample") {
     SetupTestSamplingRandom();
+  } else if (config.TEST_SAMPLING_METHOD() == "maxmin-sample") {
+    SetupTestSamplingMaxMin();
   } else {
     emp_assert(false, "Unimplemented test sampling method.", config.TEST_SAMPLING_METHOD());
   }
@@ -472,20 +476,116 @@ void SelectorAnalyzer::SetupTestSamplingRandom() {
   emp_assert(config.TEST_SAMPLING_PROP() > 0);
   do_sample_tests_fun = [this]() {
     // Use a random subset of tests for selection
-    emp_assert((config.TEST_SAMPLING_PROP() * (double)cur_total_tests) > 0);
+    emp_assert((int)(config.TEST_SAMPLING_PROP() * (double)cur_total_tests) > 0);
     const size_t sample_size = (size_t)(config.TEST_SAMPLING_PROP() * (double)cur_total_tests);
-
-    // Use all test cases for selection
-    // emp::vector<size_t> test_ids(cur_total_tests, 0);
+    // Begin with all test cases
     sel_valid_tests.resize(cur_total_tests, 0);
     std::iota(
       sel_valid_tests.begin(),
       sel_valid_tests.end(),
       0
     );
+    // Shuffle and chop down to sample size
     emp::Shuffle(random, sel_valid_tests);
     sel_valid_tests.resize(sample_size);
-    // TODO - test sample!
+  };
+}
+
+void SelectorAnalyzer::SetupTestSamplingMaxMin() {
+  emp_assert(config.TEST_SAMPLING_PROP() > 0);
+  emp_assert(config.MAXMIN_POP_PROP() > 0);
+
+  do_sample_tests_fun = [this]() {
+    // Calculate the test sample size
+    emp_assert((int)(config.TEST_SAMPLING_PROP() * (double)cur_total_tests) > 0);
+    const size_t test_sample_size = (size_t)(config.TEST_SAMPLING_PROP() * (double)cur_total_tests);
+    // Calculate number of candidates to use in order to perform max min sampling (need at least 2)
+    emp_assert((int)(config.MAXMIN_POP_PROP() * (double)cur_pop_size) > 1);
+    const size_t cand_sample_size = (config.MAXMIN_POP_PROP() * (double)cur_pop_size);
+    emp_assert(cand_sample_size > 1 && cand_sample_size <= cur_pop_size);
+
+    // Pick a subset of possible parents to base maxmin sampling on.
+    emp::vector<size_t> sampled_cand_ids(cur_pop_size, 0);
+    std::iota(
+      sampled_cand_ids.begin(),
+      sampled_cand_ids.end(),
+      0
+    );
+    emp::Shuffle(random, sampled_cand_ids);
+    sampled_cand_ids.resize(cand_sample_size);
+    // Build a matrix of sampled test profiles
+    emp::vector< emp::vector<double> > sampled_test_profiles(
+      cur_total_tests,
+      emp::vector<double>(cand_sample_size, -1)
+    );
+    for (size_t cand_i = 0; cand_i < sampled_cand_ids.size(); ++cand_i) {
+      const size_t cand_id = sampled_cand_ids[cand_i];
+      const auto& cand_scores = cur_pop.GetOrg(cand_id).test_case_scores;
+      for (size_t test_id = 0; test_id < cand_scores.size(); ++test_id) {
+        sampled_test_profiles[test_id][cand_i] = cand_scores[test_id];
+      }
+    }
+
+    // TODO - move into max min sampling utility function (that takes matrix as input)
+    // Initialize a cache for distances between test profiles
+    emp::vector< emp::vector<double> > dist_cache(
+      cur_total_tests,
+      emp::vector<double>(cur_total_tests, -1)
+    );
+    emp::vector<size_t> available_ids(cur_total_tests, 0);
+    std::iota(
+      available_ids.begin(),
+      available_ids.end(),
+      0
+    );
+    emp::Shuffle(random, available_ids);
+    std::unordered_set<size_t> included_ids;
+    // Seed sample with random test case.
+    emp::vector<size_t> sampled_test_ids({available_ids.back()});
+    available_ids.pop_back();
+
+    while (sampled_test_ids.size() < test_sample_size) {
+      double maxmin_dist = -1;
+      size_t maxmin_id = 0;
+      size_t maxmin_avail_idx = 0;
+
+      // For each possible test to be sampled, find its minimum distance to an already sampled test.
+      for (size_t avail_idx = 0; avail_idx < available_ids.size(); ++avail_idx) {
+        size_t cur_test_id = available_ids[avail_idx];
+        double cur_min_dist = 0;
+        const auto& cur_test_profile = sampled_test_profiles[cur_test_id];
+
+        for (size_t sampled_idx = 0; sampled_idx < sampled_test_ids.size(); ++sampled_idx) {
+          const size_t sampled_id = sampled_test_ids[sampled_idx];
+          emp_assert(sampled_id != cur_test_id);
+          double dist = 0.0;
+          if (dist_cache[cur_test_id][sampled_id] != -1) {
+            dist = dist_cache[cur_test_id][sampled_id];
+          } else {
+            const auto& sampled_test_profile = sampled_test_profiles[sampled_id];
+            dist = VecDist(sampled_test_profile, cur_test_profile);
+            dist_cache[cur_test_id][sampled_id] = dist;
+            dist_cache[sampled_id][cur_test_id] = dist;
+          }
+          if (sampled_idx == 0 || dist < cur_min_dist) {
+            cur_min_dist = dist;
+          }
+          if (dist == 0) break; // Not going to get bigger than zero.
+        }
+
+        if ( avail_idx==0 || cur_min_dist > maxmin_dist ) {
+          maxmin_dist = cur_min_dist;
+          maxmin_id = cur_test_id;
+          maxmin_avail_idx = avail_idx;
+        }
+      }
+      // move sampled id to back of available
+      std::swap(available_ids[maxmin_avail_idx], available_ids[available_ids.size()-1]);
+      emp_assert(available_ids.back() == maxmin_id);
+      available_ids.pop_back();
+      sampled_test_ids.emplace_back(maxmin_id);
+    }
+
   };
 
 }
