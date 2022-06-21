@@ -72,6 +72,8 @@ protected:
 
   PopulationSet pop_set;
   Population cur_pop;
+  Population next_pop;
+  size_t cur_gen=0;
   size_t cur_selection_round=0;
   size_t cur_pop_idx=0;
   size_t cur_pop_size=0;
@@ -100,6 +102,8 @@ protected:
 
   // Called at beginning of analyzing population
   void SetupPop(size_t pop_id);
+
+  void DoReproduction();
 
 public:
 
@@ -389,8 +393,14 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
   run_selection_routine = [this]() {
     do_sample_tests_fun(); // Sample tests (if necessary)
     do_partition_fun(); // Partition (if necessary)
-    std::cout << "  - used tests: " << sel_valid_tests << std::endl;
-    std::cout << "  - selectable candidates: " << sel_valid_candidates << std::endl;
+    // std::cout << "  - used tests: " << sel_valid_tests << std::endl;
+    // std::cout << "  - selectable candidates: " << sel_valid_candidates << std::endl;
+    // std::cout << "  - selectable uids:";
+    // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
+    //   std::cout << " " << cur_pop.GetOrg(i).uid;
+    // }
+    // std::cout << std::endl;
+
     // Run selection for each cohort
     cur_selected.clear();
     emp_assert(sel_candidate_partitions.size() == sel_test_partitions.size());
@@ -403,7 +413,13 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
         std::back_inserter(cur_selected)
       );
     }
-    std::cout << "  - selected candidates: " << cur_selected << std::endl;
+    // std::cout << "  - selected candidates: " << cur_selected << std::endl;
+    // std::cout << "  - selected uids: ";
+    // for (size_t i = 0; i < cur_selected.size(); ++i) {
+    //   std::cout << " " << cur_pop.GetOrg(cur_selected[i]).uid;
+    // }
+    // std::cout << std::endl;
+
     emp_assert(cur_selected.size() == cur_pop_size, cur_selected.size(), cur_pop_size);
   };
 }
@@ -414,8 +430,14 @@ void SelectorAnalyzer::SetupPartitioningNone() {
   // Setup default run selection routine
   run_selection_routine = [this]() {
     do_sample_tests_fun(); // Sample tests (if necessary)
-    std::cout << "  - used tests: " << sel_valid_tests << std::endl;
-    std::cout << "  - selectable candidates: " << sel_valid_candidates << std::endl;
+    // std::cout << "  - used tests: " << sel_valid_tests << std::endl;
+    // std::cout << "  - selectable candidates: " << sel_valid_candidates << std::endl;
+    // std::cout << "  - selectable uids:";
+    // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
+    //   std::cout << " " << cur_pop.GetOrg(i).uid;
+    // }
+    // std::cout << std::endl;
+
     const auto& selected = do_selection_fun(cur_pop_size, sel_valid_tests, sel_valid_candidates);
     cur_selected.resize(selected.size(), 0);
     std::copy(
@@ -424,19 +446,29 @@ void SelectorAnalyzer::SetupPartitioningNone() {
       cur_selected.begin()
     );
     emp_assert(cur_selected.size() == cur_pop_size);
+
     std::cout << "  - selected candidates: " << cur_selected << std::endl;
+    std::cout << "  - selected uids: ";
+    for (size_t i = 0; i < cur_selected.size(); ++i) {
+      std::cout << " " << cur_pop.GetOrg(cur_selected[i]).uid;
+    }
+    std::cout << std::endl;
   };
 }
 
 void SelectorAnalyzer::SetupPop(size_t pop_id) {
   emp_assert(pop_id < pop_set.GetSize());
   cur_pop_idx = pop_id;
+  cur_gen = 0;
 
   // Initialize cur_pop with specified loaded population.
   auto& loaded_pop = pop_set.GetPop(cur_pop_idx);
   cur_pop.SetNumTestCases(loaded_pop.GetNumTestCases());  // Update number of test cases
   cur_pop.UpdatePopSize(loaded_pop.GetSize());            // Update population size
   cur_pop.SetPopInfo(loaded_pop.GetPopInfo());            // Update population information
+  next_pop.SetNumTestCases(loaded_pop.GetNumTestCases());
+  next_pop.UpdatePopSize(loaded_pop.GetSize());
+  next_pop.SetPopInfo(loaded_pop.GetPopInfo());
   // Update each organism
   for (size_t org_id = 0; org_id < cur_pop.GetSize(); ++org_id) {
     cur_pop.SetOrg(org_id, loaded_pop.GetOrg(org_id));
@@ -484,6 +516,21 @@ void SelectorAnalyzer::SetupPop(size_t pop_id) {
 
 }
 
+void SelectorAnalyzer::DoReproduction() {
+  emp_assert(cur_selected.size() == next_pop.GetSize());
+  emp_assert(cur_selected.size() == cur_pop.GetSize());
+  // Reproduce selected organisms into next_pop
+  for (size_t sel_i = 0; sel_i < cur_selected.size(); ++sel_i) {
+    const size_t sel_id = cur_selected[sel_i];
+    next_pop.SetOrg(sel_i, cur_pop.GetOrg(sel_id));
+  }
+  // Move next pop into cur pop
+  // std::swap(cur_pop, next_pop); // TODO - test!
+  for (size_t org_id = 0; org_id < cur_pop_size; ++org_id) {
+    cur_pop.SetOrg(org_id, next_pop.GetOrg(org_id));
+  }
+}
+
 void SelectorAnalyzer::Run() {
   // For each population, run selection scheme for configured number of replicates.
   for (size_t pop_i=0; pop_i < pop_set.GetSize(); ++pop_i) {
@@ -491,12 +538,30 @@ void SelectorAnalyzer::Run() {
     // Update pop info
     SetupPop(pop_i); // TODO - turn this into a signal?
     for (cur_selection_round=0; cur_selection_round < config.SELECTION_ROUNDS(); ++cur_selection_round) {
-      // std::cout << "  selection round " << cur_selection_round << std::endl;
       run_selection_routine();
-      // std::cout << "  - selected (" << cur_selected.size() << "): " << cur_selected << std::endl;
       // todo - output data
+      // TODO - reconcile the fact that we've already run selection once
 
-      // TODO - support running for N "generations?"
+      // e.g., want to include appropriate data for gen0 in time series collection, but don't want to update any single-shot files
+      // Copy selected into next_pop
+      if (config.GENS() > 0) {
+        // todo - print uids
+        DoReproduction();
+        // std::cout << "    gen " << cur_gen << " uids:";
+        // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
+        //   std::cout << " " << cur_pop.GetOrg(i).uid;
+        // }
+        // std::cout << std::endl;
+        for (cur_gen=1; cur_gen < config.GENS(); ++cur_gen) {
+          run_selection_routine();
+          // DoReproduction();
+          // std::cout << "     gen " << cur_gen << " uids: ";
+          // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
+          //   std::cout << " " << cur_pop.GetOrg(i).uid;
+          // }
+          // std::cout << std::endl;
+        }
+      }
     }
 
   }
