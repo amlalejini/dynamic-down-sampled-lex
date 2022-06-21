@@ -525,75 +525,7 @@ void SelectorAnalyzer::SetupTestSamplingMaxMin() {
         sampled_test_profiles[test_id][cand_i] = cand_scores[test_id];
       }
     }
-
-    // TODO - move into max min sampling utility function (that takes matrix as input)
-    // Initialize a cache for distances between test profiles
-    emp::vector< emp::vector<double> > dist_cache(
-      cur_total_tests,
-      emp::vector<double>(cur_total_tests, -1)
-    );
-    emp::vector<size_t> available_ids(cur_total_tests, 0);
-    std::iota(
-      available_ids.begin(),
-      available_ids.end(),
-      0
-    );
-    emp::Shuffle(random, available_ids);
-    std::unordered_set<size_t> included_ids;
-    // Seed sample with random test case.
-    emp::vector<size_t> sampled_test_ids({available_ids.back()});
-    available_ids.pop_back();
-
-    while (sampled_test_ids.size() < test_sample_size) {
-      double maxmin_dist = -1;
-      size_t maxmin_id = 0;
-      size_t maxmin_avail_idx = 0;
-
-      // For each possible test to be sampled, find its minimum distance to an already sampled test.
-      for (size_t avail_idx = 0; avail_idx < available_ids.size(); ++avail_idx) {
-        size_t cur_test_id = available_ids[avail_idx];
-        double cur_min_dist = 0;
-        const auto& cur_test_profile = sampled_test_profiles[cur_test_id];
-
-        for (size_t sampled_idx = 0; sampled_idx < sampled_test_ids.size(); ++sampled_idx) {
-          const size_t sampled_id = sampled_test_ids[sampled_idx];
-          emp_assert(sampled_id != cur_test_id);
-          double dist = 0.0;
-          if (dist_cache[cur_test_id][sampled_id] != -1) {
-            dist = dist_cache[cur_test_id][sampled_id];
-          } else {
-            const auto& sampled_test_profile = sampled_test_profiles[sampled_id];
-            dist = VecDist(sampled_test_profile, cur_test_profile);
-            dist_cache[cur_test_id][sampled_id] = dist;
-            dist_cache[sampled_id][cur_test_id] = dist;
-          }
-          if (sampled_idx == 0 || dist < cur_min_dist) {
-            cur_min_dist = dist;
-          }
-          if (dist == 0) break; // Not going to get bigger than zero.
-        }
-
-        if ( avail_idx==0 || cur_min_dist > maxmin_dist ) {
-          maxmin_dist = cur_min_dist;
-          maxmin_id = cur_test_id;
-          maxmin_avail_idx = avail_idx;
-        }
-      }
-      // move sampled id to back of available
-      std::swap(available_ids[maxmin_avail_idx], available_ids[available_ids.size()-1]);
-      emp_assert(available_ids.back() == maxmin_id);
-      available_ids.pop_back();
-      sampled_test_ids.emplace_back(maxmin_id);
-    }
-
-    // Copy sampled test ids out
-    sel_valid_tests.resize(test_sample_size, 0);
-    std::copy(
-      sampled_test_ids.begin(),
-      sampled_test_ids.end(),
-      sel_valid_tests.begin()
-    );
-
+    sel_valid_tests = MaxMinSample(random, test_sample_size, sampled_test_profiles);
   };
 
 }
@@ -613,13 +545,11 @@ void SelectorAnalyzer::SetupPartitioning() {
 void SelectorAnalyzer::SetupPartitioningRandomCohort() {
   // Configure do partitioning function
   do_partition_fun = [this]() {
-    // std::cout << "  [do partitioning]" << std::endl;
     // Partition population and tests into an equal number of cohorts
     emp_assert(config.COHORT_PARTITIONING_PROP() > 0 and config.COHORT_PARTITIONING_PROP() <= 1.0);
     const size_t num_valid_tests = sel_valid_tests.size();
     const size_t num_valid_candidates = sel_valid_candidates.size();
     emp_assert(num_valid_tests > 0);
-    // std::cout << "    num valid tests: " << num_valid_tests << std::endl;
     // Calculate population cohort partition sizes
     emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_candidates) > 0, "Too small of a population to ensure one individual per cohort.");
     const size_t base_pop_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_candidates);
@@ -628,10 +558,6 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
     // Calculate test case cohort partition sizes
     emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests) > 0, "Too few tests (post-sampling) to ensure at least one test per cohort.");
     const size_t base_test_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests);
-
-    // std::cout << "    base pop cohort size: " << base_pop_cohort_size << std::endl;
-    // std::cout << "    base test cohort size: " << base_test_cohort_size << std::endl;
-    // std::cout << "    num cohorts: " << num_pop_cohorts << std::endl;
 
     // Shuffle candidates (to randomly assign into cohorts)
     emp::vector<size_t> candidates(num_valid_candidates, 0);
@@ -660,9 +586,6 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
     int leftover_tests = num_valid_tests - (num_pop_cohorts*base_test_cohort_size);
     size_t cur_test_i = 0;
 
-    // std::cout << "    leftover pop: " << leftover_pop << std::endl;
-    // std::cout << "    leftover tests: " << leftover_tests << std::endl;
-
     for (size_t cohort_i = 0; cohort_i < sel_candidate_partitions.size(); ++cohort_i) {
       // -- Fill population cohort --
       auto& pop_cohort = sel_candidate_partitions[cohort_i];
@@ -684,7 +607,6 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
         test_cohort[i] = tests[cur_test_i];
         ++cur_test_i;
       }
-      // std::cout << "    Pop cohort " << cohort_i << " ("<<pop_cohort.size()<<"): " << pop_cohort << std::endl;
     }
     // Should not be any leftover candidates because we based cohort sizing off of population size.
     emp_assert(leftover_pop == 0);
@@ -695,9 +617,6 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
       ++cohort_i;
     }
 
-    // for (size_t cohort_i = 0; cohort_i < num_pop_cohorts; ++cohort_i) {
-    //   std::cout << "    Test cohort " << cohort_i << " (" << sel_test_partitions[cohort_i].size() << "): " << sel_test_partitions[cohort_i] << std::endl;
-    // }
     emp_assert(cur_cand_i == candidates.size(), cur_cand_i, candidates.size()); // Ensure that we used all of the candidates.
     emp_assert(cur_test_i == num_valid_tests, cur_test_i, num_valid_tests, tests.size()); // Ensure that we used all of the tests.
   };
