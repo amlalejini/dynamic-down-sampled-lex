@@ -42,6 +42,20 @@ public:
     return selected;
   }
 
+  emp::vector<size_t>& operator()(
+    size_t n,
+    const emp::vector<size_t>& cand_ids
+  ) {
+    emp_assert(cand_ids.size() > 0);
+    selected.resize(n, 0);
+    std::generate(
+      selected.begin(),
+      selected.end(),
+      [this, &cand_ids]() { return cand_ids[random.GetUInt(cand_ids.size())]; }
+    );
+    return selected;
+  }
+
 };
 
 }
