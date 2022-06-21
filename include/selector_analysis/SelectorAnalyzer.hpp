@@ -3,10 +3,13 @@
 // Standard includes
 #include <unordered_set>
 #include <functional>
+#include <sys/stat.h>
+#include <filesystem>
 
 // Empirical includes
-#include "emp/math/Random.hpp"
+#include "emp/data/DataFile.hpp"
 #include "emp/datastructs/set_utils.hpp"
+#include "emp/math/Random.hpp"
 
 // Local includes
 #include "selection/SelectionSchemes.hpp"
@@ -43,6 +46,31 @@ const std::unordered_set<std::string> valid_partitioning_methods = {
   "random-cohort"
 };
 
+template<typename CONFIG_T>
+void SnapshotConfig(
+  const CONFIG_T& cfg,
+  const std::string& file_path
+) {
+  emp::DataFile snapshot_file(file_path);
+  std::function<std::string(void)> get_param;
+  std::function<std::string(void)> get_value;
+  snapshot_file.AddFun<std::string>(
+    [&get_param]() { return get_param(); },
+    "parameter"
+  );
+  snapshot_file.AddFun<std::string>(
+    [&get_value]() { return get_value(); },
+    "value"
+  );
+  snapshot_file.PrintHeaderKeys();
+
+  for (const auto& entry : cfg) {
+    get_param = [&entry]() { return entry.first; };
+    get_value = [&entry]() { return emp::to_string(entry.second->GetValue()); };
+    snapshot_file.Update();
+  }
+}
+
 // Run one selector over all loaded populations N number of times.
 // Output statistics about which candidates were selected.
 class SelectorAnalyzer {
@@ -69,6 +97,10 @@ protected:
 
   emp::vector< std::function<double(void)> > aggregate_score_funs;                ///< One function for each individual in the population.
   emp::vector< emp::vector< std::function<double(void)> > > test_score_fun_sets;  ///< One set of functions for each individual in the population.
+
+  std::string output_dir;
+  emp::Ptr<emp::DataFile> summary_file=nullptr;
+  // TODO - config snapshot output
 
   PopulationSet pop_set;
   Population cur_pop;
@@ -118,6 +150,7 @@ public:
 
   ~SelectorAnalyzer() {
     if (selector!=nullptr) selector.Delete();
+    if (summary_file!=nullptr) summary_file.Delete();
   }
 
   void Run();
@@ -134,6 +167,9 @@ void SelectorAnalyzer::Setup() {
   SetupTestSampling();
   // Configure partitoning method
   SetupPartitioning();
+  // Configure data tracking
+  SetupDataTracking();
+
 
   // TODO - finish setup
   std::cout << "Done setting up SelectorAnalyzer" << std::endl;
@@ -149,8 +185,20 @@ void SelectorAnalyzer::SetupPopulations() {
 void SelectorAnalyzer::SetupDataTracking() {
   // TODO
 
+  // Prepare output directory
+  output_dir = config.OUTPUT_DIR();
+  mkdir(output_dir.c_str(), ACCESSPERMS);
+  if (output_dir.back() != '/') output_dir += '/';
+
+  // Setup summary file
+  summary_file = emp::NewPtr<emp::DataFile>(output_dir + "summary.csv");
+  // TODO - add functions to summary file
+
+  summary_file->PrintHeaderKeys();
+
   // Info to track:
   // - Evaluations? --> How many test scores would have need to be evaluated by selection scheme?
+  SnapshotConfig(config, output_dir+"run_config.csv");
 }
 
 // Needs to be run for each population to be analyzed
