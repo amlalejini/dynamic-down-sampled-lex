@@ -264,13 +264,14 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
     emp_assert(num_valid_tests > 0);
     std::cout << "    num valid tests: " << num_valid_tests << std::endl;
     // Calculate population cohort partition sizes
+    // TODO - work out partitions based on valid candidates instead of assuming all are valid?
     emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)cur_pop_size) > 0, "Too small of a population to ensure one individual per cohort.");
     const size_t base_pop_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)cur_pop_size);
     const size_t num_pop_cohorts = cur_pop_size / base_pop_cohort_size;
 
     // Calculate test case cohort partition sizes
-    emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests) > 0);
-    const size_t base_test_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests, "Too few tests (post-sampling) to ensure at least one test per cohort.");
+    emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests) > 0, "Too few tests (post-sampling) to ensure at least one test per cohort.");
+    const size_t base_test_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests);
 
     std::cout << "    base pop cohort size: " << base_pop_cohort_size << std::endl;
     std::cout << "    base test cohort size: " << base_test_cohort_size << std::endl;
@@ -293,6 +294,7 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
       tests.begin()
     );
     emp::Shuffle(random, tests);
+
     // TODO - simplify this!
     // TODO - test num pop cohorts
     sel_candidate_partitions.resize(num_pop_cohorts);
@@ -328,9 +330,23 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
         test_cohort[i] = tests[cur_test_i];
         ++cur_test_i;
       }
+      std::cout << "    Pop cohort " << cohort_i << " ("<<pop_cohort.size()<<"): " << pop_cohort << std::endl;
     }
-    emp_assert(cur_cand_i == candidates.size()); // Ensure that we used all of the candidates.
-    emp_assert(cur_test_i == tests.size()); // Ensure that we used all of the tests.
+    // Should not be any leftover candidates because we based cohort sizing off of population size.
+    emp_assert(leftover_pop == 0);
+    // But, there might be leftover tests, so we need to distribute them evenly across cohorts.
+    size_t cohort_i = 0;
+    for (; cur_test_i < tests.size(); ++cur_test_i) {
+      sel_test_partitions[cohort_i%num_pop_cohorts].emplace_back(tests[cur_test_i]);
+      ++cohort_i;
+    }
+
+    for (size_t cohort_i = 0; cohort_i < num_pop_cohorts; ++cohort_i) {
+      std::cout << "    Test cohort " << cohort_i << " (" << sel_test_partitions[cohort_i].size() << "): " << sel_test_partitions[cohort_i] << std::endl;
+    }
+
+    emp_assert(cur_cand_i == candidates.size(), cur_cand_i, candidates.size()); // Ensure that we used all of the candidates.
+    emp_assert(cur_test_i == num_valid_tests, cur_test_i, num_valid_tests, tests.size()); // Ensure that we used all of the tests.
 
     // TODO - print pop cohort sizes
   };
