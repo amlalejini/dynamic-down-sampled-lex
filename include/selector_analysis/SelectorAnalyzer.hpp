@@ -6,6 +6,7 @@
 
 // Empirical includes
 #include "emp/math/Random.hpp"
+#include "emp/datastructs/set_utils.hpp"
 
 // Local includes
 #include "selection/SelectionSchemes.hpp"
@@ -16,11 +17,11 @@ namespace selector_analysis {
 
 const std::unordered_set<std::string> valid_selection_methods = {
   "lexicase",
-  "random"
+  "tournament",
+  "random",
+  "elite",
   // "lexicase-even-leads",
   // ...
-  // "elite",
-  // "tournament",
   // "non-dominated-elite",
   // "non-dominated-tournament",
   // "random",
@@ -93,6 +94,8 @@ protected:
   void SetupSelection();
   void SetupLexicaseSelection();
   void SetupRandomSelection();
+  void SetupTournamentSelection();
+  void SetupEliteSelection();
 
   // Called at beginning of analyzing population
   void SetupPop(size_t pop_id);
@@ -147,20 +150,20 @@ void SelectorAnalyzer::SetupDataTracking() {
 
 // Needs to be run for each population to be analyzed
 void SelectorAnalyzer::SetupSelection() {
-  // TODO -- setup actual selection scheme + sampling + partitioning?
-  // TODO - any general-purpose wiring
-  // TODO - validate options
+  emp_assert(emp::Has(valid_selection_methods, config.SELECTION_METHOD()));
   std::cout << "Setting up selection method: " << config.SELECTION_METHOD() << std::endl;
   if (config.SELECTION_METHOD() == "lexicase") {
     SetupLexicaseSelection();
+  } else if (config.SELECTION_METHOD() == "tournament") {
+    SetupTournamentSelection();
+  } else if (config.SELECTION_METHOD() == "elite") {
+    SetupEliteSelection();
   } else if (config.SELECTION_METHOD() == "random") {
     SetupRandomSelection();
   } else {
     // code should never reach this else (unless I forget to add a selection scheme here that is in the valid selection method set)
     emp_assert(false, "Unimplemented selection scheme.", config.SELECTION_METHOD());
   }
-
-  // TODO - setup default function to run overall selection routine (this might be overriden?)
 }
 
 void SelectorAnalyzer::SetupLexicaseSelection() {
@@ -179,23 +182,58 @@ void SelectorAnalyzer::SetupLexicaseSelection() {
   };
 }
 
-void SelectorAnalyzer::SetupRandomSelection() {
-  selector = emp::NewPtr<selection::RandomSelect>(
+void SelectorAnalyzer::SetupTournamentSelection() {
+  selector = emp::NewPtr<selection::TournamentSelect>(
+    test_score_fun_sets,
     random,
-    cur_pop_size
+    config.TOURNAMENT_SIZE()
   );
-  // TODO - make this work with partitioning! (cur pop size not what we want for number of selected things)
-  do_selection_fun = [this](size_t n, emp::vector<size_t>& tests, emp::vector<size_t>& candidates ) -> emp::vector<size_t>& {
-    emp::Ptr<selection::RandomSelect> sel = selector.Cast<selection::RandomSelect>();
+  do_selection_fun = [this](
+    size_t n,
+    emp::vector<size_t>& tests,
+    emp::vector<size_t>& candidates
+  ) -> emp::vector<size_t>& {
+    emp::Ptr<selection::TournamentSelect> sel = selector.Cast<selection::TournamentSelect>();
     return (*sel)(
-      cur_pop_size,
+      n,
+      tests,
       candidates
     );
   };
 }
 
+void SelectorAnalyzer::SetupEliteSelection() {
+  selector = emp::NewPtr<selection::EliteSelect>(
+    test_score_fun_sets,
+    config.ELITE_COUNT()
+  );
+  do_selection_fun = [this](
+    size_t n,
+    emp::vector<size_t>& tests,
+    emp::vector<size_t>& candidates
+  ) -> emp::vector<size_t>& {
+    emp::Ptr<selection::EliteSelect> sel = selector.Cast<selection::EliteSelect>();
+    return (*sel)(
+      n,
+      tests,
+      candidates
+    );
+  };
+}
+
+void SelectorAnalyzer::SetupRandomSelection() {
+  selector = emp::NewPtr<selection::RandomSelect>(
+    random,
+    cur_pop_size
+  );
+  do_selection_fun = [this](size_t n, emp::vector<size_t>& tests, emp::vector<size_t>& candidates ) -> emp::vector<size_t>& {
+    emp::Ptr<selection::RandomSelect> sel = selector.Cast<selection::RandomSelect>();
+    return (*sel)(n, candidates);
+  };
+}
+
 void SelectorAnalyzer::SetupTestSampling() {
-  // todo - validate option
+  emp_assert(emp::Has(valid_test_case_sampling_methods, config.TEST_SAMPLING_METHOD()));
   std::cout << "Setting up test sampling method: " << config.TEST_SAMPLING_METHOD() << std::endl;
   if (config.TEST_SAMPLING_METHOD() == "none") {
     SetupTestSamplingNone();
@@ -243,7 +281,7 @@ void SelectorAnalyzer::SetupTestSamplingRandom() {
 }
 
 void SelectorAnalyzer::SetupPartitioning() {
-  // todo - validate option
+  emp_assert(emp::Has(valid_partitioning_methods, config.PARTITIONING_METHOD()));
   std::cout << "Setting up partitioning method: " << config.PARTITIONING_METHOD() << std::endl;
   if (config.PARTITIONING_METHOD() == "none") {
     SetupPartitioningNone();
@@ -257,36 +295,36 @@ void SelectorAnalyzer::SetupPartitioning() {
 void SelectorAnalyzer::SetupPartitioningRandomCohort() {
   // Configure do partitioning function
   do_partition_fun = [this]() {
-    std::cout << "  [do partitioning]" << std::endl;
+    // std::cout << "  [do partitioning]" << std::endl;
     // Partition population and tests into an equal number of cohorts
     emp_assert(config.COHORT_PARTITIONING_PROP() > 0 and config.COHORT_PARTITIONING_PROP() <= 1.0);
     const size_t num_valid_tests = sel_valid_tests.size();
+    const size_t num_valid_candidates = sel_valid_candidates.size();
     emp_assert(num_valid_tests > 0);
-    std::cout << "    num valid tests: " << num_valid_tests << std::endl;
+    // std::cout << "    num valid tests: " << num_valid_tests << std::endl;
     // Calculate population cohort partition sizes
-    // TODO - work out partitions based on valid candidates instead of assuming all are valid?
-    emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)cur_pop_size) > 0, "Too small of a population to ensure one individual per cohort.");
-    const size_t base_pop_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)cur_pop_size);
-    const size_t num_pop_cohorts = cur_pop_size / base_pop_cohort_size;
+    emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_candidates) > 0, "Too small of a population to ensure one individual per cohort.");
+    const size_t base_pop_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_candidates);
+    const size_t num_pop_cohorts = num_valid_candidates / base_pop_cohort_size;
 
     // Calculate test case cohort partition sizes
     emp_assert((size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests) > 0, "Too few tests (post-sampling) to ensure at least one test per cohort.");
     const size_t base_test_cohort_size = (size_t)(config.COHORT_PARTITIONING_PROP() * (double)num_valid_tests);
 
-    std::cout << "    base pop cohort size: " << base_pop_cohort_size << std::endl;
-    std::cout << "    base test cohort size: " << base_test_cohort_size << std::endl;
-    std::cout << "    num cohorts: " << num_pop_cohorts << std::endl;
+    // std::cout << "    base pop cohort size: " << base_pop_cohort_size << std::endl;
+    // std::cout << "    base test cohort size: " << base_test_cohort_size << std::endl;
+    // std::cout << "    num cohorts: " << num_pop_cohorts << std::endl;
 
-    // TODO  shuffle candidates
-    emp::vector<size_t> candidates(cur_pop_size, 0);
-    std::iota(
-      candidates.begin(),
-      candidates.end(),
-      0
+    // Shuffle candidates (to randomly assign into cohorts)
+    emp::vector<size_t> candidates(num_valid_candidates, 0);
+    std::copy(
+      sel_valid_candidates.begin(),
+      sel_valid_candidates.end(),
+      candidates.begin()
     );
     emp::Shuffle(random, candidates);
 
-    // TODO shuffle test ids
+    // Shuffle test ids (to randomly assign into cohorts)
     emp::vector<size_t> tests(num_valid_tests, 0);
     std::copy(
       sel_valid_tests.begin(),
@@ -295,20 +333,18 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
     );
     emp::Shuffle(random, tests);
 
-    // TODO - simplify this!
-    // TODO - test num pop cohorts
+    // Size the partitions
     sel_candidate_partitions.resize(num_pop_cohorts);
-    int leftover_pop = cur_pop_size - (num_pop_cohorts*base_pop_cohort_size);
+    int leftover_pop = num_valid_candidates - (num_pop_cohorts*base_pop_cohort_size);
     size_t cur_cand_i=0;
 
     sel_test_partitions.resize(num_pop_cohorts); // same number of population and test cohorts
     int leftover_tests = num_valid_tests - (num_pop_cohorts*base_test_cohort_size);
     size_t cur_test_i = 0;
 
-    std::cout << "    leftover pop: " << leftover_pop << std::endl;
-    std::cout << "    leftover tests: " << leftover_tests << std::endl;
+    // std::cout << "    leftover pop: " << leftover_pop << std::endl;
+    // std::cout << "    leftover tests: " << leftover_tests << std::endl;
 
-    // TODO - leftover pop?
     for (size_t cohort_i = 0; cohort_i < sel_candidate_partitions.size(); ++cohort_i) {
       // -- Fill population cohort --
       auto& pop_cohort = sel_candidate_partitions[cohort_i];
@@ -330,7 +366,7 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
         test_cohort[i] = tests[cur_test_i];
         ++cur_test_i;
       }
-      std::cout << "    Pop cohort " << cohort_i << " ("<<pop_cohort.size()<<"): " << pop_cohort << std::endl;
+      // std::cout << "    Pop cohort " << cohort_i << " ("<<pop_cohort.size()<<"): " << pop_cohort << std::endl;
     }
     // Should not be any leftover candidates because we based cohort sizing off of population size.
     emp_assert(leftover_pop == 0);
@@ -341,14 +377,11 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
       ++cohort_i;
     }
 
-    for (size_t cohort_i = 0; cohort_i < num_pop_cohorts; ++cohort_i) {
-      std::cout << "    Test cohort " << cohort_i << " (" << sel_test_partitions[cohort_i].size() << "): " << sel_test_partitions[cohort_i] << std::endl;
-    }
-
+    // for (size_t cohort_i = 0; cohort_i < num_pop_cohorts; ++cohort_i) {
+    //   std::cout << "    Test cohort " << cohort_i << " (" << sel_test_partitions[cohort_i].size() << "): " << sel_test_partitions[cohort_i] << std::endl;
+    // }
     emp_assert(cur_cand_i == candidates.size(), cur_cand_i, candidates.size()); // Ensure that we used all of the candidates.
     emp_assert(cur_test_i == num_valid_tests, cur_test_i, num_valid_tests, tests.size()); // Ensure that we used all of the tests.
-
-    // TODO - print pop cohort sizes
   };
 
   // Setup run selection routine
@@ -369,6 +402,7 @@ void SelectorAnalyzer::SetupPartitioningRandomCohort() {
         std::back_inserter(cur_selected)
       );
     }
+    std::cout << "  - selected candidates: " << cur_selected << std::endl;
     emp_assert(cur_selected.size() == cur_pop_size, cur_selected.size(), cur_pop_size);
   };
 }
@@ -388,6 +422,8 @@ void SelectorAnalyzer::SetupPartitioningNone() {
       selected.end(),
       cur_selected.begin()
     );
+    emp_assert(cur_selected.size() == cur_pop_size);
+    std::cout << "  - selected candidates: " << cur_selected << std::endl;
   };
 }
 
@@ -440,23 +476,18 @@ void SelectorAnalyzer::Run() {
   // For each population, run selection scheme for configured number of replicates.
   for (size_t pop_i=0; pop_i < pop_set.GetSize(); ++pop_i) {
     std::cout << "Analzying pop " << pop_i << std::endl;
-    // (1) Update pop info
+    // Update pop info
     SetupPop(pop_i); // TODO - turn this into a signal?
-    // TODO - Setup sampling/partitioning?
     for (cur_selection_round=0; cur_selection_round < config.SELECTION_ROUNDS(); ++cur_selection_round) {
-      std::cout << "  selection round " << cur_selection_round << std::endl;
+      // std::cout << "  selection round " << cur_selection_round << std::endl;
       run_selection_routine();
-      std::cout << "  - selected (" << cur_selected.size() << "): " << cur_selected << std::endl;
-      // todo - run Selection on current population
-      // const auto& selected = do_selection_fun(sel_valid_tests);
-      // todo - cur_selected = selected (for each partition)
+      // std::cout << "  - selected (" << cur_selected.size() << "): " << cur_selected << std::endl;
       // todo - output data
 
-      // If running for more than 1, update the population
+      // TODO - support running for N "generations?"
     }
 
   }
-
 
 }
 
