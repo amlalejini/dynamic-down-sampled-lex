@@ -586,6 +586,14 @@ void SelectorAnalyzer::SetupTestSamplingMaxMin() {
       sampled_test_ids.emplace_back(maxmin_id);
     }
 
+    // Copy sampled test ids out
+    sel_valid_tests.resize(test_sample_size, 0);
+    std::copy(
+      sampled_test_ids.begin(),
+      sampled_test_ids.end(),
+      sel_valid_tests.begin()
+    );
+
   };
 
 }
@@ -843,12 +851,12 @@ void SelectorAnalyzer::Run() {
   // For each population, run selection scheme for configured number of replicates.
   for (size_t pop_i=0; pop_i < pop_set.GetSize(); ++pop_i) {
     std::cout << "Analzying pop " << pop_i << std::endl;
-    // Update pop info
-    SetupPop(pop_i); // TODO - turn this into a signal?
-    cur_gen = 0;
-    summary_file->Update(); // Collect info about original population, mark as generation 0.
-
     for (cur_selection_round=0; cur_selection_round < config.SELECTION_ROUNDS(); ++cur_selection_round) {
+      // Re-init population.
+      SetupPop(pop_i); // TODO - turn this into a signal?
+      cur_gen = 0;
+      summary_file->Update(); // Collect info about original population, mark as generation 0.
+      // Increment generations, run first parent selection.
       ++cur_gen;
       run_selection_routine();
       // Update current population with selected individuals
@@ -857,12 +865,7 @@ void SelectorAnalyzer::Run() {
       cur_pop_stats.Calculate(cur_pop);
       // Output population statistics
       summary_file->Update();
-
       // todo - output data
-      // TODO - reconcile the fact that we've already run selection once
-
-      // e.g., want to include appropriate data for gen0 in time series collection, but don't want to update any single-shot files
-      // Copy selected into next_pop
       if (config.GENS() > 0) {
         ++cur_gen;
         for (; cur_gen < (int)config.GENS(); ++cur_gen) {
