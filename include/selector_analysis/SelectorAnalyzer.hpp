@@ -10,6 +10,8 @@
 #include "emp/data/DataFile.hpp"
 #include "emp/datastructs/set_utils.hpp"
 #include "emp/math/Random.hpp"
+#include "emp/bits/BitVector.hpp"
+#include "emp/math/stats.hpp"
 
 // Local includes
 #include "selection/SelectionSchemes.hpp"
@@ -77,8 +79,8 @@ class SelectorAnalyzer {
 public:
   using config_t = SelectorAnalysisConfig;
 
-
 protected:
+
   const config_t& config;
   emp::Random random;
 
@@ -105,17 +107,86 @@ protected:
   PopulationSet pop_set;
   Population cur_pop;
   Population next_pop;
-  size_t cur_gen=0;
+  int cur_gen=0;
   size_t cur_selection_round=0;
   size_t cur_pop_idx=0;
   size_t cur_pop_size=0;
   size_t cur_total_tests=0;
   emp::vector<size_t> cur_selected;
 
+  // Containers for organizing statistics -- note, may want to organize this a bit better/more generically later
+  struct PopStatistics {
+    std::unordered_set<size_t> tests_covered;
+    size_t test_coverage;
+
+    // set of phenotypes (as bitstrings?)
+    double phenotype_entropy;
+    double phenotype_richness;
+
+    // todo - max test coverage?
+    // todo - calc pareto front size?
+
+    void Reset() {
+      tests_covered.clear();
+      test_coverage=0;
+      phenotype_richness=0.0;
+      phenotype_richness=0;
+    }
+
+    void Calculate(const Population& pop) {
+      Reset();
+      const size_t num_tests = pop.GetNumTestCases();
+      const size_t pop_size = pop.GetSize();
+      // Collect covered tests
+      for (size_t test_i = 0; test_i < num_tests; ++test_i) {
+        for (size_t cand_i = 0; cand_i < pop_size; ++cand_i) {
+          const bool pass = pop.GetOrg(cand_i).test_case_scores[test_i] >= 1.0;
+          if (pass) {
+            tests_covered.emplace(test_i);
+            break; // Don't need to look at anymore candidates, already covered.
+          }
+        }
+      }
+      test_coverage = tests_covered.size();
+
+      // Collect binary pass/fail phenotypes
+      emp::vector<emp::BitVector> phenotypes;
+      for (size_t cand_i = 0; cand_i < pop_size; ++cand_i) {
+        phenotypes.emplace_back(num_tests, false);
+        auto& cur_phen = phenotypes.back();
+        for (size_t test_i = 0; test_i < num_tests; ++test_i) {
+          cur_phen[test_i] = pop.GetOrg(cand_i).test_case_scores[test_i] >= 1.0;
+        }
+      }
+
+      phenotype_richness = emp::UniqueCount(phenotypes);
+      phenotype_entropy = emp::ShannonEntropy(phenotypes);
+    }
+  };
+
+  struct SelectedStatistics {
+    std::unordered_set<size_t> selected_uids;
+    size_t num_unique_selected;
+    double entropy_selected;
+
+    void Calculate(const emp::vector<size_t>& selected, const Population& pop) {
+      // TODO
+    }
+
+  };
+
+  PopStatistics init_pop_stats;
+  PopStatistics cur_pop_stats;
+
+
+  // struct SelectionSchemeStatistics {
+  //   size_t
+  // };
+
   void Setup();
 
   void SetupPopulations();
-  void SetupDataTracking();
+  void SetupDataCollection();
 
   // note - might be able to make sampling/partitioning more flexible by using structs/classes for each sampling/partitioning method (where base version does nothing)
   void SetupTestSampling();
@@ -168,8 +239,7 @@ void SelectorAnalyzer::Setup() {
   // Configure partitoning method
   SetupPartitioning();
   // Configure data tracking
-  SetupDataTracking();
-
+  SetupDataCollection();
 
   // TODO - finish setup
   std::cout << "Done setting up SelectorAnalyzer" << std::endl;
@@ -182,7 +252,7 @@ void SelectorAnalyzer::SetupPopulations() {
   std::cout << "  ...successfully loaded " << pop_set.GetSize() << " population(s)." << std::endl;
 }
 
-void SelectorAnalyzer::SetupDataTracking() {
+void SelectorAnalyzer::SetupDataCollection() {
   // TODO
 
   // Prepare output directory
@@ -192,7 +262,94 @@ void SelectorAnalyzer::SetupDataTracking() {
 
   // Setup summary file
   summary_file = emp::NewPtr<emp::DataFile>(output_dir + "summary.csv");
-  // TODO - add functions to summary file
+  // population id
+  summary_file->AddFun<size_t>(
+    [this]() { return cur_pop_idx; },
+    "pop_id"
+  );
+  // generation
+  summary_file->AddFun<int>(
+    [this]() { return cur_gen; },
+    "generation"
+  );
+  // sel_replicate
+  summary_file->AddFun<size_t>(
+    [this]() { return cur_selection_round; },
+    "sel_replicate"
+  );
+  // cur_pop_size
+  summary_file->AddFun<size_t>(
+    [this]() { return cur_pop_size; },
+    "pop_size"
+  );
+  // cur_total_tests
+  summary_file->AddFun<size_t>(
+    [this]() { return cur_total_tests; },
+    "total_test_cases"
+  );
+  // population_info (as json? "{}")
+  summary_file->AddFun<std::string>(
+    [this]() {
+      std::ostringstream stream;
+      stream << "\"{";
+      bool first=true;
+      for (auto& entry : cur_pop.GetPopInfo()) {
+        if (!first) {
+          stream << ",";
+        }
+        first=false;
+        stream << entry.first << ":" << entry.second;
+      }
+      stream << "}\"";
+      return stream.str();
+    },
+    "pop_info"
+  );
+  // test_coverage
+  summary_file->AddFun<double>(
+    [this]() {
+      return cur_pop_stats.test_coverage;
+    },
+    "pop_test_coverage"
+  );
+  // phenotype_entropy
+  summary_file->AddFun<double>(
+    [this]() {
+      return cur_pop_stats.phenotype_entropy;
+    },
+    "pop_phenotype_entropy"
+  );
+  // phenotype_richness
+  summary_file->AddFun<double>(
+    [this]() {
+      return cur_pop_stats.phenotype_richness;
+    },
+    "pop_phenotype_richness"
+  );
+
+  // test_coverage_loss
+  summary_file->AddFun<double>(
+    [this]() {
+      return (init_pop_stats.test_coverage - cur_pop_stats.test_coverage);
+    },
+    "pop_test_coverage_loss"
+  );
+  // phenotype_entropy_delta
+  summary_file->AddFun<double>(
+    [this]() {
+      return (init_pop_stats.phenotype_entropy - cur_pop_stats.phenotype_entropy);
+    },
+    "pop_phenotype_entropy_diff"
+  );
+  // phenotype_richness_loss
+  summary_file->AddFun<double>(
+    [this]() {
+      return (init_pop_stats.phenotype_richness - cur_pop_stats.phenotype_richness);
+    },
+    "pop_phenotype_entropy_loss"
+  );
+
+  // TODO - add additional statistics output
 
   summary_file->PrintHeaderKeys();
 
@@ -562,6 +719,9 @@ void SelectorAnalyzer::SetupPop(size_t pop_id) {
     0
   );
 
+  // Calculate statistics for initial loaded population.
+  init_pop_stats.Calculate(cur_pop);
+  cur_pop_stats.Calculate(cur_pop);
 }
 
 void SelectorAnalyzer::DoReproduction() {
@@ -585,29 +745,31 @@ void SelectorAnalyzer::Run() {
     std::cout << "Analzying pop " << pop_i << std::endl;
     // Update pop info
     SetupPop(pop_i); // TODO - turn this into a signal?
+    cur_gen = 0;
+    summary_file->Update(); // Collect info about original population, mark as generation 0.
+
     for (cur_selection_round=0; cur_selection_round < config.SELECTION_ROUNDS(); ++cur_selection_round) {
+      ++cur_gen;
       run_selection_routine();
+      // Update current population with selected individuals
+      DoReproduction();
+      // Calculate statistics on population post-selection
+      cur_pop_stats.Calculate(cur_pop);
+      // Output population statistics
+      summary_file->Update();
+
       // todo - output data
       // TODO - reconcile the fact that we've already run selection once
 
       // e.g., want to include appropriate data for gen0 in time series collection, but don't want to update any single-shot files
       // Copy selected into next_pop
       if (config.GENS() > 0) {
-        // todo - print uids
-        DoReproduction();
-        // std::cout << "    gen " << cur_gen << " uids:";
-        // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
-        //   std::cout << " " << cur_pop.GetOrg(i).uid;
-        // }
-        // std::cout << std::endl;
-        for (cur_gen=1; cur_gen < config.GENS(); ++cur_gen) {
+        ++cur_gen;
+        for (; cur_gen < (int)config.GENS(); ++cur_gen) {
           run_selection_routine();
-          // DoReproduction();
-          // std::cout << "     gen " << cur_gen << " uids: ";
-          // for (size_t i = 0; i < cur_pop.GetSize(); ++i) {
-          //   std::cout << " " << cur_pop.GetOrg(i).uid;
-          // }
-          // std::cout << std::endl;
+          DoReproduction();
+          cur_pop_stats.Calculate(cur_pop);
+          summary_file->Update();
         }
       }
     }
