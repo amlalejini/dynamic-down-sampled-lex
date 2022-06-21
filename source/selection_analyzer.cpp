@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
 
   // todo run analysis
   selector_analysis::SelectorAnalyzer analyzer(config);
+  analyzer.Run();
 
   // selector_analysis::PopulationSet pop_set;
   // pop_set.LoadFromCSV("pop.csv");

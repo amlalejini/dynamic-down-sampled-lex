@@ -13,6 +13,15 @@ namespace selector_analysis {
     GROUP(SELECTION, "Selection settings"),
     VALUE(SELECTION_METHOD, std::string, "random", "Which selection method should be used?"),
     VALUE(SELECTION_ROUNDS, size_t, 10, "How many times to run selection scheme on each loaded population?"),
+
+    GROUP(TEST_SAMPLING, "Sampling settings"),
+    VALUE(TEST_SAMPLING_METHOD, std::string, "none", "Method of sampling test cases to use."),
+    VALUE(TEST_SAMPLING_PROP, double, 0.1, "Proportion of tests to sample for selection." ),
+
+    GROUP(PARTITIONING, "Partitioning settings"),
+    VALUE(PARTITIONING_METHOD, std::string, "none", "Method of partitioning population and/or test cases"),
+    VALUE(COHORT_PARTITIONING_PROP, double, 0.1, "Proportion of test set and population sizes to use for test and population partitions, respectively."),
+
   )
 
 } // namespace diag
