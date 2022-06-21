@@ -26,19 +26,23 @@ public:
     emp::vector<double> test_case_scores;
     double agg_score;
 
+    size_t uid=0; ///< NOTE - does not correspond to index in Population::orgs
+
     Organism(
       const emp::vector<double>& in_test_case_scores=emp::vector<double>(),
-      double in_agg_score=0.0
+      double in_agg_score=0.0,
+      size_t in_uid=0
     ) :
       test_case_scores(in_test_case_scores),
-      agg_score(in_agg_score)
+      agg_score(in_agg_score),
+      uid(in_uid)
     { }
 
   };
 
 protected:
 
-  std::string name;
+  std::string name="";
   pop_info_t info; ///< Info about how this population was generated
   // emp::vector< emp::vector<double> > pop_test_case_scores;
   // emp::vector< double > pop_agg_scores;
@@ -46,6 +50,7 @@ protected:
   size_t num_test_cases;
 
 public:
+  Population() { }
 
   Population(
     const std::string& pop_name,
@@ -76,8 +81,13 @@ public:
   }
 
   const pop_info_t& GetPopInfo() const { return info; }
+  void SetPopInfo(const pop_info_t& in_info) {
+    info = in_info;
+  }
 
   void SetScores(size_t cand_id, const emp::vector<double>& test_scores) {
+    emp_assert(test_scores.size() == num_test_cases);
+    emp_assert(cand_id < GetSize());
     // if (cand_id >= pop_test_case_scores.size()) {
     //   pop_test_case_scores.resize(cand_id + 1);
     // }
@@ -87,6 +97,18 @@ public:
     }
     orgs[cand_id].test_case_scores = test_scores;
     orgs[cand_id].agg_score = emp::Sum(test_scores); // NOTE - could make this function configurable
+  }
+
+  void SetUID(size_t cand_id, size_t uid) {
+    GetOrg(cand_id).uid = uid;
+  }
+
+  void SetOrg(size_t cand_id, const Organism& in_org) {
+    auto& org = GetOrg(cand_id);
+    emp_assert(in_org.test_case_scores.size() == GetNumTestCases());
+    org.agg_score = in_org.agg_score;
+    org.test_case_scores = in_org.test_case_scores;
+    org.uid = in_org.uid;
   }
 };
 
@@ -209,6 +231,7 @@ void PopulationSet::LoadFromCSV(const std::string& path) {
     emp_assert(test_scores.size() == population.GetNumTestCases());
     // Add test case profile to population
     population.SetScores(cand_id, test_scores);
+    population.SetUID(cand_id, cand_id);
   }
 }
 

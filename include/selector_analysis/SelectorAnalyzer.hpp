@@ -71,6 +71,7 @@ protected:
   emp::vector< emp::vector< std::function<double(void)> > > test_score_fun_sets;  ///< One set of functions for each individual in the population.
 
   PopulationSet pop_set;
+  Population cur_pop;
   size_t cur_selection_round=0;
   size_t cur_pop_idx=0;
   size_t cur_pop_size=0;
@@ -248,7 +249,7 @@ void SelectorAnalyzer::SetupTestSamplingNone() {
   // Configure do sample function
   do_sample_tests_fun = [this]() {
     // Use all test cases for selection
-    sel_valid_tests.resize(pop_set.GetPop(cur_pop_idx).GetNumTestCases());
+    sel_valid_tests.resize(cur_pop.GetNumTestCases());
     std::iota(
       sel_valid_tests.begin(),
       sel_valid_tests.end(),
@@ -430,7 +431,18 @@ void SelectorAnalyzer::SetupPartitioningNone() {
 void SelectorAnalyzer::SetupPop(size_t pop_id) {
   emp_assert(pop_id < pop_set.GetSize());
   cur_pop_idx = pop_id;
-  auto& cur_pop = pop_set.GetPop(cur_pop_idx);
+
+  // Initialize cur_pop with specified loaded population.
+  auto& loaded_pop = pop_set.GetPop(cur_pop_idx);
+  cur_pop.SetNumTestCases(loaded_pop.GetNumTestCases());  // Update number of test cases
+  cur_pop.UpdatePopSize(loaded_pop.GetSize());            // Update population size
+  cur_pop.SetPopInfo(loaded_pop.GetPopInfo());            // Update population information
+  // Update each organism
+  for (size_t org_id = 0; org_id < cur_pop.GetSize(); ++org_id) {
+    cur_pop.SetOrg(org_id, loaded_pop.GetOrg(org_id));
+  }
+
+  // auto& cur_pop = pop_set.GetPop(cur_pop_idx);
   cur_pop_size = cur_pop.GetSize();
   cur_total_tests = cur_pop.GetNumTestCases();
   // Wire up aggregate score and test score functions
@@ -441,7 +453,7 @@ void SelectorAnalyzer::SetupPop(size_t pop_id) {
     // Wire aggregate score
     aggregate_score_funs.emplace_back(
       [this, org_id]() {
-        return pop_set.GetPop(cur_pop_idx).GetOrg(org_id).agg_score;
+        return cur_pop.GetOrg(org_id).agg_score;
       }
     );
     // Wire test score function set
@@ -451,7 +463,7 @@ void SelectorAnalyzer::SetupPop(size_t pop_id) {
     for (size_t fun_i = 0; fun_i < fun_set_size; ++fun_i) {
       test_score_fun_sets[org_id].emplace_back(
         [this, org_id, fun_i]() -> double {
-          return pop_set.GetPop(cur_pop_idx).GetOrg(org_id).test_case_scores[fun_i];
+          return cur_pop.GetOrg(org_id).test_case_scores[fun_i];
         }
       );
     }
