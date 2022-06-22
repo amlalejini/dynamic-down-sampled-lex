@@ -30,7 +30,6 @@ const std::unordered_set<std::string> valid_selection_methods = {
   // ...
   // "non-dominated-elite",
   // "non-dominated-tournament",
-  // "random",
   // "none"
 };
 
@@ -42,7 +41,6 @@ const std::unordered_set<std::string> valid_test_case_sampling_methods = {
   // ....
 };
 
-// TODO - Partitioning methods?
 const std::unordered_set<std::string> valid_partitioning_methods = {
   "none",
   "random-cohort"
@@ -122,8 +120,9 @@ protected:
     // set of phenotypes (as bitstrings?)
     double phenotype_entropy;
     double phenotype_richness;
+    double max_aggregate_score;
 
-    // TODO - single-test specialist count
+    // TODO - single-test specialist count?
     // TODO - max test coverage?
     // TODO - calc pareto front size?
 
@@ -132,6 +131,7 @@ protected:
       test_coverage=0;
       phenotype_richness=0.0;
       phenotype_richness=0;
+      max_aggregate_score=0.0;
     }
 
     void Calculate(const Population& pop) {
@@ -162,23 +162,50 @@ protected:
 
       phenotype_richness = emp::UniqueCount(phenotypes);
       phenotype_entropy = emp::ShannonEntropy(phenotypes);
+
+      // Collect aggregate scores
+      emp::vector<double> agg_scores(pop_size, 0.0);
+      for (size_t cand_i = 0; cand_i < pop_size; ++cand_i) {
+        agg_scores[cand_i] = pop.GetOrg(cand_i).agg_score;
+      }
+      max_aggregate_score = emp::FindMax(agg_scores);
+
     }
   };
 
   struct SelectedStatistics {
-    std::unordered_set<size_t> selected_uids;
-    size_t num_unique_selected;
-    double entropy_selected;
+    emp::vector<size_t> selected_uids;
+    size_t num_unique_cand_selected;
+    double entropy_cand_selected;
+
+    size_t num_unique_uids_selected;
+    double entropy_uids_selected;
+
+    void Reset() {
+      selected_uids.clear();
+      num_unique_cand_selected=0;
+      entropy_cand_selected=0;
+      num_unique_uids_selected=0;
+      entropy_uids_selected=0;
+    }
 
     void Calculate(const emp::vector<size_t>& selected, const Population& pop) {
-      // TODO
+      Reset();
+      num_unique_cand_selected = emp::UniqueCount(selected);
+      entropy_cand_selected = emp::ShannonEntropy(selected);
+      selected_uids.resize(selected.size(), 0);
+      for (size_t i = 0; i < selected_uids.size(); ++i) {
+        selected_uids[i] = pop.GetOrg(selected[i]).uid;
+      }
+      num_unique_uids_selected = emp::UniqueCount(selected_uids);
+      entropy_uids_selected = emp::ShannonEntropy(selected_uids);
     }
 
   };
 
   PopStatistics init_pop_stats;
   PopStatistics cur_pop_stats;
-
+  SelectedStatistics cur_selected_stats;
 
   // struct SelectionSchemeStatistics {
   //   size_t
@@ -314,6 +341,12 @@ void SelectorAnalyzer::SetupDataCollection() {
     },
     "pop_test_coverage"
   );
+  summary_file->AddFun<double>(
+    [this]() {
+      return cur_pop_stats.max_aggregate_score;
+    },
+    "pop_max_agg_score"
+  );
   // phenotype_entropy
   summary_file->AddFun<double>(
     [this]() {
@@ -350,6 +383,34 @@ void SelectorAnalyzer::SetupDataCollection() {
     },
     "pop_phenotype_entropy_loss"
   );
+  // pop_max_agg_score_diff
+  summary_file->AddFun<double>(
+    [this]() {
+      return (init_pop_stats.max_aggregate_score - cur_pop_stats.max_aggregate_score);
+    },
+    "pop_max_agg_score_diff"
+  );
+
+  summary_file->AddFun<size_t>(
+    [this]() { return cur_selected_stats.num_unique_cand_selected; },
+    "num_unique_cand_selected"
+  );
+
+  summary_file->AddFun<double>(
+    [this]() { return cur_selected_stats.entropy_cand_selected; },
+    "entropy_cand_selected"
+  );
+
+  summary_file->AddFun<double>(
+    [this]() { return cur_selected_stats.num_unique_uids_selected; },
+    "num_unique_uids_selected"
+  );
+
+  summary_file->AddFun<double>(
+    [this]() { return cur_selected_stats.entropy_uids_selected; },
+    "entropy_uids_selected"
+  );
+
 
   // TODO - add additional statistics output
 
@@ -775,10 +836,12 @@ void SelectorAnalyzer::Run() {
 
       SetupPop(pop_i); // TODO - turn this into a signal?
       cur_gen = 0;
+      cur_selected_stats.Reset();
       summary_file->Update(); // Collect info about original population, mark as generation 0.
       // Increment generations, run first parent selection.
       ++cur_gen;
       run_selection_routine();
+      cur_selected_stats.Calculate(cur_selected, cur_pop); // Run selected stats *before* doing reproduction
       // Update current population with selected individuals
       DoReproduction();
       // Calculate statistics on population post-selection
@@ -791,6 +854,7 @@ void SelectorAnalyzer::Run() {
         for (; cur_gen < (int)config.GENS(); ++cur_gen) {
           std::cout << " Gen=" << cur_gen << std::endl;
           run_selection_routine();
+          cur_selected_stats.Calculate(cur_selected, cur_pop);
           DoReproduction();
           cur_pop_stats.Calculate(cur_pop);
           summary_file->Update();
