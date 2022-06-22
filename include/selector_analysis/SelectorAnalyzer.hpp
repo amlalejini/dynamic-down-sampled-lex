@@ -679,12 +679,12 @@ void SelectorAnalyzer::SetupPartitioningNone() {
     );
     emp_assert(cur_selected.size() == cur_pop_size);
 
-    std::cout << "  - selected candidates: " << cur_selected << std::endl;
-    std::cout << "  - selected uids: ";
-    for (size_t i = 0; i < cur_selected.size(); ++i) {
-      std::cout << " " << cur_pop.GetOrg(cur_selected[i]).uid;
-    }
-    std::cout << std::endl;
+    // std::cout << "  - selected candidates: " << cur_selected << std::endl;
+    // std::cout << "  - selected uids: ";
+    // for (size_t i = 0; i < cur_selected.size(); ++i) {
+    //   std::cout << " " << cur_pop.GetOrg(cur_selected[i]).uid;
+    // }
+    // std::cout << std::endl;
   };
 }
 
@@ -772,6 +772,7 @@ void SelectorAnalyzer::Run() {
     std::cout << "Analzying pop " << pop_i << std::endl;
     for (cur_selection_round=0; cur_selection_round < config.SELECTION_ROUNDS(); ++cur_selection_round) {
       // Re-init population.
+
       SetupPop(pop_i); // TODO - turn this into a signal?
       cur_gen = 0;
       summary_file->Update(); // Collect info about original population, mark as generation 0.
@@ -788,6 +789,7 @@ void SelectorAnalyzer::Run() {
       if (config.GENS() > 0) {
         ++cur_gen;
         for (; cur_gen < (int)config.GENS(); ++cur_gen) {
+          std::cout << " Gen=" << cur_gen << std::endl;
           run_selection_routine();
           DoReproduction();
           cur_pop_stats.Calculate(cur_pop);

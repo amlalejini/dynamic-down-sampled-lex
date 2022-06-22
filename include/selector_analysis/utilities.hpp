@@ -59,7 +59,7 @@ emp::vector<size_t> MaxMinSample(
 
   emp::vector<size_t> sampled_test_ids;
   if (start_profile >= 0) {
-    emp_assert(start_profile < profiles.size());
+    emp_assert(start_profile < (int)profiles.size());
     // Seed sample with specified test case.
     sampled_test_ids.emplace_back(start_profile);
     emp_assert((size_t)start_profile == available_ids[start_profile]);
