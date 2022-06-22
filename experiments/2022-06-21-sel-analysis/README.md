@@ -2,6 +2,8 @@
 
 Run preliminary version of SelectorAnalyzer to compare different test case subsampling approaches on synthetic populations with randomly generated test case profiles (pass/fail assignments).
 
+Commit hash when run: `38834a350220ee401830a382334abcc748554949`
+
 - Selection methods:
   - Lexicase
   - Lexicase + random test sample
