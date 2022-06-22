@@ -851,7 +851,7 @@ void SelectorAnalyzer::Run() {
       // todo - output data
       if (config.GENS() > 0) {
         ++cur_gen;
-        for (; cur_gen < (int)config.GENS(); ++cur_gen) {
+        for (; cur_gen <= (int)config.GENS(); ++cur_gen) {
           std::cout << " Gen=" << cur_gen << std::endl;
           run_selection_routine();
           cur_selected_stats.Calculate(cur_selected, cur_pop);
