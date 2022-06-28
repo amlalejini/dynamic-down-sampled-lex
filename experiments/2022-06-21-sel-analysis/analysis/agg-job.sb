@@ -16,7 +16,7 @@ RESOLUTION=10000
 
 REPO_DIR=/mnt/home/lalejini/devo_ws/${PROJECT_NAME}
 ANALYSIS_DIR=${REPO_DIR}/experiments/${EXP_SLUG}/analysis
-DATA_DIR=/mnt/scratch/lalejini/data/dynamic-ds-lex/${EXP_SLUG}
+DATA_DIR=/mnt/gs21/scratch/lalejini/data/dynamic-ds-lex/${EXP_SLUG}
 DUMP_DIR=${ANALYSIS_DIR}/dump
 
 # Configure local environment
