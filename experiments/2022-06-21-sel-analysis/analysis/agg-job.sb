@@ -1,0 +1,30 @@
+#!/bin/bash
+###############################################################
+#SBATCH --job-name=agg
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=8G
+#SBATCH --time=24:00:00
+#SBATCH --account=devolab
+###############################################################
+
+EXP_SLUG=2022-06-21-sel-analysis
+PROJECT_NAME=dynamic-down-sampled-lex
+UNITS=total
+RESOLUTION=10000
+
+REPO_DIR=/mnt/home/lalejini/devo_ws/${PROJECT_NAME}
+ANALYSIS_DIR=${REPO_DIR}/experiments/${EXP_SLUG}/analysis
+DATA_DIR=/mnt/scratch/lalejini/data/dynamic-ds-lex/${EXP_SLUG}
+DUMP_DIR=${ANALYSIS_DIR}/dump
+
+# Configure local environment
+cd ${REPO_DIR}
+source load-hpc-env
+
+# Run data aggregation script(s).
+
+# Aggregate data
+cd ${ANALYSIS_DIR}
+python aggregate.py --data_dir ${DATA_DIR} --dump ${DUMP_DIR}
