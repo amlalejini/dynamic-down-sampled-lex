@@ -39,7 +39,6 @@ def main():
     print(f"Found {len(run_dirs)} run directories.")
 
     # Create file to hold time series data
-    time_series_content = []    # This will hold all the lines to write out for a single run; written out for each run.
     time_series_header = None   # Holds the time series file header (verified for consistency across runs)
     time_series_fpath = os.path.join(dump_dir, f"time_series.csv")
     with open(time_series_fpath, "w") as fp:
@@ -100,6 +99,14 @@ def main():
                 sel_condition += f"_{info['COHORT_PARTITIONING_PROP']}"
             info["sel_condition"] = sel_condition
             run_info.append(info)
+
+            sampling_method = test_sample_method
+            if "random-cohort" in sel_condition:
+                sampling_method = "cohort-partitioning"
+            sample_prop = info["COHORT_PARTITIONING_PROP"] if sampling_method == "cohort-partitioning" else info["TEST_SAMPLING_PROP"]
+
+            info["sample_method"] = sampling_method
+            info["sample_prop"] = sample_prop
         ############################################################
 
         ############################################################
