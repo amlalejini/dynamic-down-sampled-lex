@@ -1,0 +1,344 @@
+# 2022-06-21 - Static Selection Analysis Experiment
+
+## Setup
+
+```{r}
+experiment_slug <- "2022-06-21-sel-analysis"
+working_directory <- paste0("experiments/",experiment_slug,"/analysis/")
+```
+
+### Analysis dependencies
+
+Load all required R libraries
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(cowplot)
+library(RColorBrewer)
+library(khroma)
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+```
+
+These analyses were knit with the following environment:
+
+```{r}
+print(version)
+```
+
+### Load data
+
+```{r}
+time_series_data_loc <- paste0(working_directory, "data/time_series.csv")
+# time_series_data_loc <- paste0(working_directory, "test/dump/time_series.csv")
+time_series_data <- read.csv(time_series_data_loc, na.strings="NONE")
+
+time_series_data$pop_id <- as.factor(time_series_data$pop_id)
+
+sample_method_rename <- function(sample_method, test_sample, pop_sample) {
+  if (sample_method == "maxmin-sample") {
+    return(paste0("maxmin", pop_sample, "_", test_sample))
+  } else if (sample_method == "cohort-partitioning") {
+    return(paste0("cohort_", test_sample))
+  } else if (sample_method == "random-sample") {
+    return(paste0("random_", test_sample))
+  } else if (sample_method == "none") {
+    return("full")
+  } else {
+    return("unknown")
+  }
+}
+time_series_data$sample_method_mod <- mapply(
+  sample_method_rename,
+  time_series_data$sample_method,
+  time_series_data$sample_prop,
+  time_series_data$MAXMIN_POP_PROP
+)
+
+time_series_data$sample_method_mod <- factor(
+  time_series_data$sample_method_mod,
+  levels=c(
+    "full",
+    "cohort_0.05",
+    "cohort_0.1",
+    "maxmin0.01_0.05",
+    "maxmin0.01_0.1",
+    "maxmin0.1_0.05",
+    "maxmin0.1_0.1",
+    "random_0.05",
+    "random_0.1"
+  )
+)
+
+focal_time_series_data <- filter(
+  time_series_data,
+  sample_method_mod %in% c(
+    "full",
+    "cohort_0.05",
+    "cohort_0.1",
+    "maxmin0.01_0.05",
+    "maxmin0.01_0.1",
+    "random_0.05",
+    "random_0.1"
+  ) &
+  pop_class %in% c(
+    "random-1000p-200t-50pp-10s",
+    "random-1000p-200t-10pp-10s",
+    "random-1000p-200t-01pp-10s"
+  )
+)
+```
+
+```{r}
+single_sel_data <- filter(
+  focal_time_series_data,
+  generation=="1"
+)
+
+```
+
+Miscellaneous setup.
+
+```{r}
+# Configure our default graphing theme
+theme_set(theme_cowplot())
+# Palette
+scale_fill_fun <- scale_fill_vibrant
+scale_color_fun <- scale_color_vibrant
+alpha <- 0.05
+# Create a directory to store plots
+plot_directory <- paste0(working_directory, "plots/")
+dir.create(plot_directory, showWarnings=FALSE)
+```
+
+## Single-selection results
+
+### pop_test_coverage_loss
+
+```{r}
+ggplot(
+    single_sel_data,
+    aes(
+      x=sample_method_mod,
+      y=pop_test_coverage_loss,
+      fill=sample_method_mod
+    )
+  ) +
+  geom_point(
+    mapping=aes(color=sample_method_mod),
+    position = position_jitter(),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_fun(
+    name="Selection method"
+  ) +
+  scale_color_fun(
+    name="Selection method"
+  ) +
+  facet_wrap(
+    ~pop_class,
+    scales="free_y"
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 45, hjust=1),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(plot_directory, "pop_test_coverage_loss_single_sel.pdf")
+)
+```
+
+#### over time
+
+```{r}
+gen_lim <- 20
+pop_test_coverage_loss_ot_fig <-
+  ggplot(
+    filter(
+      focal_time_series_data,
+      generation<=gen_lim
+    ),
+    aes(
+      x=generation,
+      y=pop_test_coverage_loss,
+      fill=sample_method_mod,
+      color=sample_method_mod
+    )
+  ) +
+  stat_summary(geom="line", fun=mean) +
+  stat_summary(
+    geom="ribbon",
+    fun.data="mean_cl_boot",
+    fun.args=list(conf.int=0.95),
+    alpha=0.2,
+    linetype=0
+  ) +
+  scale_y_continuous(
+    name="Test Coverage Loss",
+    limits=c(0, 205)
+  ) +
+  scale_x_continuous(
+    name="Round"
+  ) +
+  scale_fill_fun(
+    name="Selection method"
+  ) +
+  scale_color_fun(
+    name="Selection method"
+  ) +
+  facet_wrap(
+    ~pop_class,
+    scales="free_y",
+    ncol=1
+  ) +
+  theme(
+    legend.position="bottom"
+  )
+ggsave(
+  plot=pop_test_coverage_loss_ot_fig,
+  filename=paste0(plot_directory, "pop_test_coverage_loss_ot_",gen_lim,".pdf")
+)
+```
+
+### entropy_uids_selected
+
+```{r}
+ggplot(
+    single_sel_data,
+    aes(
+      x=sample_method_mod,
+      y=entropy_uids_selected,
+      fill=sample_method_mod
+    )
+  ) +
+  geom_point(
+    mapping=aes(color=sample_method_mod),
+    position = position_jitter(width=0.15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_fun(
+    name="Selection method"
+  ) +
+  scale_color_fun(
+    name="Selection method"
+  ) +
+  facet_wrap(
+    ~pop_class,
+    scales="free_y"
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 45, hjust=1),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(plot_directory, "entropy_uids_selected_single_sel.pdf")
+)
+```
+
+### num_unique_cand_selected
+
+```{r}
+ggplot(
+    single_sel_data,
+    aes(
+      x=sample_method_mod,
+      y=num_unique_cand_selected,
+      fill=sample_method_mod
+    )
+  ) +
+  geom_point(
+    mapping=aes(color=sample_method_mod),
+    position = position_jitter(width=0.15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_fun(
+    name="Selection method"
+  ) +
+  scale_color_fun(
+    name="Selection method"
+  ) +
+  facet_wrap(
+    ~pop_class,
+    scales="free_y"
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 45, hjust=1),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(plot_directory, "num_unique_cand_selected_single_sel.pdf")
+)
+```
+
+### pop_max_agg_score_diff
+
+```{r}
+ggplot(
+    single_sel_data,
+    aes(
+      x=sample_method_mod,
+      y=pop_max_agg_score_diff,
+      fill=sample_method_mod
+    )
+  ) +
+  geom_point(
+    mapping=aes(color=sample_method_mod),
+    position = position_jitter(width=0.15),
+    size = .5,
+    alpha = 0.8
+  ) +
+  geom_boxplot(
+    width = .1,
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  scale_fill_fun(
+    name="Selection method"
+  ) +
+  scale_color_fun(
+    name="Selection method"
+  ) +
+  facet_wrap(
+    ~pop_class,
+    scales="free_y"
+  ) +
+  theme(
+    legend.position="none",
+    axis.text=element_text(size=14),
+    axis.text.x = element_text(angle = 45, hjust=1),
+    panel.border = element_rect(color = "grey", fill=NA, size=1.5)
+  )
+ggsave(
+  paste0(plot_directory, "pop_max_agg_score_diff_single_sel.pdf")
+)
+```
+
+### pop_phenotype_entropy_diff
+
+### pop_phenotype_entropy_loss
+
