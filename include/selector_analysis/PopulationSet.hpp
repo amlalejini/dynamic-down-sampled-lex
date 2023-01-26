@@ -130,7 +130,10 @@ protected:
     "pop_id",
     "pop_size",
     "pop_type",
-    "specialists_per_case"
+    "specialists_per_case",
+    "background_value",
+    "fixed_pass",
+    "num_niches"
   });
 
 public:
