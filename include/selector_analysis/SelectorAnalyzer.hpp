@@ -334,6 +334,22 @@ void SelectorAnalyzer::SetupDataCollection() {
     },
     "pop_info"
   );
+  // coverage profile
+  summary_file->AddFun<std::string>(
+    [this]() {
+      std::ostringstream stream;
+      stream << "\"[";
+      // cur_pop_stats
+      for (size_t i = 0; i < cur_total_tests; ++i) {
+        if (i) stream << ",";
+        const bool covered_i = emp::Has(cur_pop_stats.tests_covered, i);
+        stream << (size_t)covered_i;
+      }
+      stream << "]\"";
+      return stream.str();
+    },
+    "pop_test_coverage_profile"
+  );
   // test_coverage
   summary_file->AddFun<double>(
     [this]() {
