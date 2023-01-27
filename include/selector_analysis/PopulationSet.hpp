@@ -229,13 +229,14 @@ void PopulationSet::LoadFromCSV(const std::string& path) {
     emp_assert(pop_id < pops.size());
     Population& population = pops[pop_id];
     emp_assert(population.GetPopInfo() == pop_desc);
-    const size_t cand_id = emp::from_string<size_t>(row[header_lu["cand_id"]]);
+    const size_t cand_id = emp::from_string<size_t>(row[header_lu["candidate_id"]]);
     emp_assert(cand_id < population.GetSize(), cand_id, population.GetSize());
     emp_assert(test_scores.size() == population.GetNumTestCases());
     // Add test case profile to population
     population.SetScores(cand_id, test_scores);
     population.SetUID(cand_id, cand_id);
   }
+
 }
 
 }

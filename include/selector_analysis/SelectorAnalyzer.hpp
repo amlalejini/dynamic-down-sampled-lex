@@ -826,6 +826,21 @@ void SelectorAnalyzer::SetupPop(size_t pop_id) {
   // Calculate statistics for initial loaded population.
   init_pop_stats.Calculate(cur_pop);
   cur_pop_stats.Calculate(cur_pop);
+
+
+  // for (size_t org_i = 0; org_i < cur_pop.GetSize(); ++org_i) {
+  //   auto& org = cur_pop.GetOrg(org_i);
+  //   std::cout << org.test_case_scores << std::endl;
+  // }
+  // std::cout << "\"[";
+  // // cur_pop_stats
+  // for (size_t i = 0; i < cur_total_tests; ++i) {
+  //   if (i) std::cout << ",";
+  //   const bool covered_i = emp::Has(cur_pop_stats.tests_covered, i);
+  //   std::cout << (size_t)covered_i;
+  // }
+  // std::cout << "]\"";
+
 }
 
 void SelectorAnalyzer::DoReproduction() {
@@ -851,6 +866,7 @@ void SelectorAnalyzer::Run() {
       // Re-init population.
 
       SetupPop(pop_i); // TODO - turn this into a signal?
+      // std::cout << "\nPop size: " <<  cur_pop.GetSize() << std::endl;
       cur_gen = 0;
       cur_selected_stats.Reset();
       summary_file->Update(); // Collect info about original population, mark as generation 0.
