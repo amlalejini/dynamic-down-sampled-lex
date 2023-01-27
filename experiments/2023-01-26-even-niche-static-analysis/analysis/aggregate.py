@@ -13,7 +13,8 @@ cfg_fields_exclude = [
     "OUTPUT_DIR"
 ]
 data_fields_exclude = [
-    "pop_info"
+    "pop_info",
+    "pop_test_coverage_profile"
 ]
 
 def main():
@@ -85,6 +86,7 @@ def main():
                 info[field] = line[field]
             # Compose custom fields
             info["pop_class"] = info["POPULATIONS_FILE"].replace(".csv", "")
+            info["pop_test_coverage_profile"] = f'\"{line["pop_test_coverage_profile"]}\"'
             # - Build selection condition field
             sel_condition = info["SELECTION_METHOD"]
             test_sample_method = info["TEST_SAMPLING_METHOD"]
